@@ -77,7 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--inset", type=float, default=0.03,
         help="seconds to shrink each span edge inward (default 0.03)",
     )
-    p_man.add_argument("--model", default="large-v3")
+    p_man.add_argument(
+        "--model", default="base.en",
+        help="WhisperX model (default base.en; large-v3 for higher accuracy)",
+    )
     p_man.add_argument("--device", default="cpu")
     p_man.add_argument("--language", default="en")
     p_man.set_defaults(func=_cmd_manifest)

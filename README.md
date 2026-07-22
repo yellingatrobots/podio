@@ -31,21 +31,25 @@ just setup-asr         # uv venv .venv + whisperx
 
 ## Run
 
+One-shot — detect and bleep in a single step, then play the result:
+
 ```sh
-just normalize input.mp3            # debug: -> normalized.wav (16kHz mono)
-just manifest input.mp3             # -> manifest.json (needs setup-asr first)
-just manifest input.mp3 out.json config/wordlist.yaml
+just censor test_audio/profanity.m4a out.wav   # needs setup-asr; uses base.en
+afplay out.wav                                  # macOS built-in player
+```
+
+Or the two stages separately, so you can review/edit the manifest between them:
+
+```sh
+just manifest input.mp3                    # -> manifest.json (default: base.en)
+just manifest input.mp3 m.json model=large-v3  # higher accuracy, slower
+just bleep input.mp3 m.json out.wav        # render from the (edited) manifest
+just normalize input.mp3                   # debug: -> normalized.wav (16kHz mono)
 ```
 
 Detected spans are post-processed (Stage 5) before the manifest is written.
 `--inset SECONDS` (default 0.03) sets how far each span edge is shrunk inward;
-`--inset 0` disables the shrink.
-
-Render the censored audio from a manifest (no ASR deps needed):
-
-```sh
-just bleep input.mp3 manifest.json out.wav    # -> out.wav with 1 kHz bleeps
-```
+`--inset 0` disables the shrink. The `bleep` step needs no ASR deps.
 
 Each `manifest` run writes two files: the manifest (spans to bleep) and a
 sibling `*.transcript.json` (the full word list with timestamps) — the lean

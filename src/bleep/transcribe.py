@@ -29,7 +29,7 @@ class WhisperXTranscriber:
 
     def __init__(
         self,
-        model_size: str = "large-v3",
+        model_size: str = "base.en",
         device: str = "cpu",
         compute_type: str = "int8",
         language: str = "en",
