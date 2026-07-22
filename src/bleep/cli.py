@@ -32,7 +32,9 @@ def _cmd_manifest(args) -> int:
     normalized = str(Path(tempfile.mkdtemp()) / "normalized.wav")
     normalize_audio(args.audio, normalized)
 
-    transcript, manifest = transcribe_and_detect(normalized, transcriber, wordlist)
+    transcript, manifest = transcribe_and_detect(
+        normalized, transcriber, wordlist, inset=args.inset
+    )
     # Report against the original file, not the temp normalized copy.
     transcript.audio_path = manifest.audio_path = args.audio
 
@@ -61,6 +63,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_man.add_argument("audio")
     p_man.add_argument("--out", default="manifest.json")
     p_man.add_argument("--wordlist", default="config/wordlist.yaml")
+    p_man.add_argument(
+        "--inset", type=float, default=0.03,
+        help="seconds to shrink each span edge inward (default 0.03)",
+    )
     p_man.add_argument("--model", default="large-v3")
     p_man.add_argument("--device", default="cpu")
     p_man.add_argument("--language", default="en")

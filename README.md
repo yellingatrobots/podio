@@ -37,6 +37,10 @@ just manifest input.mp3             # -> manifest.json (needs setup-asr first)
 just manifest input.mp3 out.json config/wordlist.yaml
 ```
 
+Detected spans are post-processed (Stage 5) before the manifest is written.
+`--inset SECONDS` (default 0.03) sets how far each span edge is shrunk inward;
+`--inset 0` disables the shrink.
+
 Each `manifest` run writes two files: the manifest (spans to bleep) and a
 sibling `*.transcript.json` (the full word list with timestamps) — the lean
 edit-list and the auditable record, respectively. `out.json` yields
