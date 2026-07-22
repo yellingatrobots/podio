@@ -51,6 +51,12 @@ Detected spans are post-processed (Stage 5) before the manifest is written.
 `--inset SECONDS` (default 0.03) sets how far each span edge is shrunk inward;
 `--inset 0` disables the shrink. The `bleep` step needs no ASR deps.
 
+`model` is a [WhisperX](https://github.com/m-bain/whisperX) model name. WhisperX
+uses the Whisper model set — `tiny`/`base`/`small`/`medium` (each with an
+English-only `.en` variant) and the multilingual `large-v2`/`large-v3`; see
+[available Whisper models](https://github.com/openai/whisper#available-models-and-languages).
+`base.en` is a good fast default; `large-v3` trades speed for accuracy.
+
 Each `manifest` run writes two files: the manifest (spans to bleep) and a
 sibling `*.transcript.json` (the full word list with timestamps) — the lean
 edit-list and the auditable record, respectively. `out.json` yields
