@@ -13,12 +13,22 @@ from pathlib import Path
 
 from .audio import normalize_audio
 from .pipeline import transcribe_and_detect
+from .render import render_file
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
 
 def _cmd_normalize(args) -> int:
     normalize_audio(args.audio, args.out)
+    print(f"wrote {args.out}")
+    return 0
+
+
+def _cmd_bleep(args) -> int:
+    render_file(
+        args.audio, args.manifest, args.out,
+        freq=args.freq, amplitude=args.amplitude,
+    )
     print(f"wrote {args.out}")
     return 0
 
@@ -71,6 +81,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_man.add_argument("--device", default="cpu")
     p_man.add_argument("--language", default="en")
     p_man.set_defaults(func=_cmd_manifest)
+
+    p_bleep = sub.add_parser("bleep", help="render censored audio from a manifest")
+    p_bleep.add_argument("audio")
+    p_bleep.add_argument("manifest")
+    p_bleep.add_argument("--out", default="censored.wav")
+    p_bleep.add_argument("--freq", type=float, default=1000.0)
+    p_bleep.add_argument("--amplitude", type=int, default=16000)
+    p_bleep.set_defaults(func=_cmd_bleep)
 
     return parser
 
