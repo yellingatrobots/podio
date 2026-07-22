@@ -9,9 +9,9 @@ def test_bleep_replaces_samples_inside_span_and_leaves_the_rest():
     out = bleep_pcm(samples, sr, [(0.25, 0.75)], freq=1000, amplitude=10000)
 
     assert len(out) == sr
-    assert out[:2000] == [5] * 2000        # before the span: untouched
-    assert out[6000:] == [5] * 2000        # after the span: untouched
-    assert any(s != 5 for s in out[2000:6000])  # inside: a tone was written
+    assert list(out[:2000]) == [5] * 2000        # before the span: untouched
+    assert list(out[6000:]) == [5] * 2000        # after the span: untouched
+    assert any(s != 5 for s in out[2000:6000])   # inside: a tone was written
 
 
 def test_tone_is_a_1khz_sine_at_the_given_amplitude():

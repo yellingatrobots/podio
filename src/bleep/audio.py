@@ -19,5 +19,10 @@ def normalize_audio(src, dst, *, rate: int = TARGET_RATE) -> Path:
         "-ac", "1", "-ar", str(rate),
         "-f", "wav", str(dst),
     ]
-    subprocess.run(cmd, check=True, capture_output=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError(
+            f"ffmpeg failed to decode {src}:\n{e.stderr.decode(errors='replace')}"
+        ) from e
     return Path(dst)

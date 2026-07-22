@@ -1,8 +1,8 @@
 # Handoff — bleep-pipeline
 
-**For:** the next session, which will build **Stage 6: the bleep renderer**.
+**For:** the next session. The detection-through-render slice is complete; the
+open work is accuracy (phonetic safety net) and fidelity (channel/codec preservation).
 **Repo:** `~/tech/bleep-pipeline` (own git repo, branch `main`).
-**Last commit:** `e48a8bd` — Stage 5 wired into the pipeline.
 
 Read `README.md` first — architecture, run commands, design notes, and the "Not
 yet built" list. This doc only adds what isn't already captured there or in the
@@ -10,10 +10,11 @@ code/commit.
 
 ## Where things stand
 
-Detection (stages 1, 2, 4) **and Stage 5 post-processing are complete and
-verified.** Flow: audio → ffmpeg normalize → WhisperX (word timestamps) →
-whole-word matching (`find_spans`) → **post-process (inset → drop → merge)** →
-`manifest.json` + sibling `*.transcript.json`. 16 unit tests green.
+Detection (stages 1, 2, 4), Stage 5 post-processing, **and Stage 6 rendering are
+complete and verified.** Flow: audio → ffmpeg normalize → WhisperX (word
+timestamps) → whole-word matching (`find_spans`) → confidence gate → post-process
+(inset → drop → merge) → `manifest.json` + sibling `*.transcript.json` →
+`render` (1 kHz bleep splice) → censored WAV. 18 unit tests green.
 
 Stage 5 (`src/bleep/postprocess.py`, pure) does:
 - **Negative inset** — shrink each span inward by `--inset` seconds per edge
@@ -29,13 +30,19 @@ Smoke-tested end-to-end on `test_audio/`: at `--inset 0.03` both spans shrink
 **Note:** `severity` was removed this session (it was informational only) and the
 wordlist was trimmed to high-only terms.
 
-## Next phase — Stage 6: the bleep renderer
+## Next phase — accuracy & fidelity
 
-Consume the manifest and produce censored audio: generate a 1 kHz tone, duck (or
-replace) the original under each span, and splice into the full-quality source.
-This one **touches audio**, so verify it with a real run on `test_audio/`, not
-just unit tests. Keep it simple — no zero-crossing/micro-fade machinery unless a
-real click problem shows up in a rendered file.
+Stage 6 renders censored audio (1 kHz tone spliced over each span into the
+full-quality source). The remaining work is in `README.md`'s "Not yet built":
+
+- **Phonetic safety net** for words the ASR mis-transcribes — the main
+  false-negative risk (a slur heard but not spelled the way the wordlist expects).
+- **Channel/codec preservation** — output is currently mono WAV; a real edit
+  should retain the source's channel layout and format.
+
+Anything that **touches audio** must be verified with a real run on
+`test_audio/`, not just unit tests. Keep it simple — no zero-crossing/micro-fade
+machinery unless a real click problem shows up in a rendered file.
 
 ## How to work in this repo (gotchas)
 

@@ -39,12 +39,13 @@ def _cmd_manifest(args) -> int:
         model_size=args.model, device=args.device, language=args.language
     )
 
-    normalized = str(Path(tempfile.mkdtemp()) / "normalized.wav")
-    normalize_audio(args.audio, normalized)
-
-    transcript, manifest = transcribe_and_detect(
-        normalized, transcriber, wordlist, inset=args.inset
-    )
+    with tempfile.TemporaryDirectory() as tmp:
+        normalized = str(Path(tmp) / "normalized.wav")
+        normalize_audio(args.audio, normalized)
+        transcript, manifest = transcribe_and_detect(
+            normalized, transcriber, wordlist,
+            inset=args.inset, min_confidence=args.min_confidence,
+        )
     # Report against the original file, not the temp normalized copy.
     transcript.audio_path = manifest.audio_path = args.audio
 
@@ -76,6 +77,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_man.add_argument(
         "--inset", type=float, default=0.03,
         help="seconds to shrink each span edge inward (default 0.03)",
+    )
+    p_man.add_argument(
+        "--min-confidence", type=float, default=0.0,
+        help="drop detections below this ASR confidence (default 0: keep all)",
     )
     p_man.add_argument(
         "--model", default="base.en",

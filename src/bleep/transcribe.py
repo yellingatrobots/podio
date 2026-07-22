@@ -1,8 +1,8 @@
 """Speech-to-text with word-level timestamps.
 
-`Transcriber` is the seam the pipeline depends on. Tests inject a fake; the
-real implementation wraps WhisperX and is imported lazily so the heavy ML
-stack is only touched when actually transcribing.
+`Transcriber` is the public interface the pipeline depends on. Tests inject a
+fake; the real implementation wraps WhisperX and is imported lazily so the heavy
+ML stack is only touched when actually transcribing.
 """
 
 from __future__ import annotations

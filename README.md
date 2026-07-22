@@ -63,7 +63,9 @@ just normalize input.mp3                   # debug: -> normalized.wav (16kHz mon
 
 Detected spans are post-processed (Stage 5) before the manifest is written.
 `--inset SECONDS` (default 0.03) sets how far each span edge is shrunk inward;
-`--inset 0` disables the shrink. The `bleep` step needs no ASR deps.
+`--inset 0` disables the shrink. `--min-confidence FLOAT` (default 0) drops
+detections below that ASR confidence, leaving them for human review instead of
+bleeping blindly. The `bleep` step needs no ASR deps.
 
 `model` is a [WhisperX](https://github.com/m-bain/whisperX) model name. WhisperX
 uses the Whisper model set — `tiny`/`base`/`small`/`medium` (each with an
@@ -95,9 +97,9 @@ safe (the Scunthorpe problem).
 
 ## Design notes
 
-- **Injected ASR seam.** `pipeline.build_manifest` depends on the `Transcriber`
-  protocol, not WhisperX directly. WhisperX is imported lazily, so the core and
-  its tests run without torch.
+- **Injected ASR interface.** `pipeline.transcribe_and_detect` depends on the
+  `Transcriber` protocol, not WhisperX directly. WhisperX is imported lazily, so
+  the core and its tests run without torch.
 - **Pure core.** Normalization (`text.py`) and matching (`wordlist.py`) are pure
   functions, unit-tested without audio or models.
 - **Manifest is audio-agnostic.** Detection produces an edit list; rendering is
