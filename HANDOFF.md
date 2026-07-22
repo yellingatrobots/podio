@@ -1,83 +1,77 @@
 # Handoff — bleep-pipeline
 
-**For:** the next session, which will build the **next phase (Stage 5: span post-processing)**.
+**For:** the next session, which will build **Stage 6: the bleep renderer**.
 **Repo:** `~/tech/bleep-pipeline` (own git repo, branch `main`).
-**Last commit:** `fadf5c0` — scaffold of the offline detection slice.
+**Last commit:** `e48a8bd` — Stage 5 wired into the pipeline.
 
-Read `README.md` first — it has the architecture, run commands, design notes, and
-the "Not yet built" list. This doc only adds what isn't already captured there or
-in the code/commit.
+Read `README.md` first — architecture, run commands, design notes, and the "Not
+yet built" list. This doc only adds what isn't already captured there or in the
+code/commit.
 
 ## Where things stand
 
-The **detection slice is complete and verified** (README covers stages 1, 2, 4):
-audio → ffmpeg normalize → WhisperX (word timestamps) → whole-word matching →
-`manifest.json` + sibling `*.transcript.json`. 11 unit tests green. Smoke-tested
-end-to-end on `test_audio/` (2 spans on profanity, 0 on clean).
+Detection (stages 1, 2, 4) **and Stage 5 post-processing are complete and
+verified.** Flow: audio → ffmpeg normalize → WhisperX (word timestamps) →
+whole-word matching (`find_spans`) → **post-process (inset → drop → merge)** →
+`manifest.json` + sibling `*.transcript.json`. 16 unit tests green.
 
-## Next phase — Stage 5: span post-processing
+Stage 5 (`src/bleep/postprocess.py`, pure) does:
+- **Negative inset** — shrink each span inward by `--inset` seconds per edge
+  (default 0.03) so the first consonant onset and last tail stay audible.
+- **Drop** spans that collapse to <= 0 width after inset.
+- **Merge** spans that still overlap; the merged span joins both words' `term`
+  and `source_text` and takes the minimum `confidence`.
 
-Full spec is in `README.md` → "Not yet built". Summary of the user's intent:
+It's wired into `transcribe_and_detect`, exposed as `manifest --inset`.
+Smoke-tested end-to-end on `test_audio/`: at `--inset 0.03` both spans shrink
+30ms per edge vs `--inset 0` (fuck 360->300ms); profanity → 2 spans, clean → 0.
 
-- **No padding.** Apply a slight **negative inset (shrinkage)** so the onset of the
-  first consonant and the tail of the last stay audible (user wants to hear the
-  "f" and "k" of "fuck").
-- Make the **inset amount a parameter** so the user can dial in how much edge stays.
-- Drop any span that collapses to ≤ 0 width after inset; **merge spans that overlap
-  after inset**.
-- Snap each voice↔bleep transition to a **zero-crossing** (or a ~2–3ms micro-fade)
-  to avoid click artifacts. (Zero-crossing = waveform amplitude ≈ 0; cutting elsewhere
-  creates a step discontinuity heard as a click.)
+**Note:** `severity` was removed this session (it was informational only) and the
+wordlist was trimmed to high-only terms.
 
-This stage is **pure and unit-testable** — it transforms the `find_spans` output
-(a list of `CensorSpan`), no audio or ML needed. Build it test-first as a new module
-(e.g. `src/bleep/postprocess.py`) with `tests/test_postprocess.py`.
+## Next phase — Stage 6: the bleep renderer
 
-After Stage 5 comes **Stage 6 (the actual bleep renderer)**: consume the manifest,
-generate 1 kHz tone, duck the original, splice into the full-quality source. That
-one does touch audio and will need a real run to verify.
+Consume the manifest and produce censored audio: generate a 1 kHz tone, duck (or
+replace) the original under each span, and splice into the full-quality source.
+This one **touches audio**, so verify it with a real run on `test_audio/`, not
+just unit tests. Keep it simple — no zero-crossing/micro-fade machinery unless a
+real click problem shows up in a rendered file.
 
 ## How to work in this repo (gotchas)
 
-- **Enter env:** `nix develop`, then `just` to list tasks. `just test` runs the pure
-  tests in the plain nix shell (no ML install needed).
+- **Enter env:** `nix develop`, then `just` to list tasks. `just test` runs the
+  pure tests in the plain nix shell (no ML install needed).
 - **Nix flakes only see git-tracked files.** After creating new files, `git add -A`
   before `nix develop` or the flake errors with "not tracked by Git".
-- **Running the ASR path:** `just setup-asr` first (installs WhisperX + torch, ~2 GB
-  into `.venv`). Real transcription runs via `.venv/bin/python` with `PYTHONPATH=src`;
-  ffmpeg comes from the nix shell. See the `manifest` recipe in the `justfile`.
-- **Models:** `base.en` was used for fast smoke tests; the CLI default is `large-v3`
-  (production accuracy, slow on CPU).
-- **Non-fatal warning:** WhisperX prints a `torchcodec` `dlopen` traceback (its bundled
-  ffmpeg dylibs don't resolve against the nix ffmpeg). Harmless — it falls back and we
-  feed it a normalized WAV. Suppressible later by aligning torchcodec/ffmpeg versions.
+- **Running the ASR path:** `.venv` already exists (WhisperX + torch). Real
+  transcription runs via `.venv/bin/python` with `PYTHONPATH=src`; ffmpeg comes
+  from the nix shell. See the `manifest` recipe in the `justfile`.
+- **Models:** use `--model base.en` for fast smoke tests; the CLI default is
+  `large-v3` (production accuracy, slow on CPU).
+- **Non-fatal warning:** WhisperX prints a `torchcodec` `dlopen` traceback. Harmless
+  — it falls back and we feed it a normalized WAV.
 - **Artifacts:** `test_audio/*.m4a` are committed fixtures. Run outputs
   (`manifest*.json`, `*.transcript.json`) are gitignored — do not commit them.
+  Write scratch run outputs to the session scratchpad, not the repo.
 
-## Working style the user expects (learned this session)
+## Working style the user expects
 
-- **Tight XP loop:** ONE small module + its test, run green, then **check in** before
-  the next unit. Do not batch-write many files.
-- **No vacuous tests.** Don't test glue/passthrough with fakes that just re-assert
-  logic already covered elsewhere — verify glue by **running it for real** instead.
-- **No leetspeak/obfuscation normalization.** This is a *transcript* process; the ASR
-  emits correctly-spelled words. Keep `text.normalize` minimal.
-- **Terminology:** it's a "transcriber interface" (not a "seam").
-- **Avoid jargon / over-explaining** in commit messages and prose.
+- **Tight XP loop:** ONE small unit + its test, run green, then **check in**
+  before the next unit. Do not batch-write many files.
+- **KISS.** Do the simplest thing; don't add machinery for problems you don't
+  yet have. The user will trim scope aggressively (e.g. removed severity).
+- **No vacuous tests.** Don't test glue/passthrough with fakes — verify glue by
+  **running it for real** (that's how Stage 5's wiring was verified).
+- **Never say "seam."** Call it the public interface / entry point.
+- **No leetspeak/obfuscation normalization** — it's a transcript process; keep
+  `text.normalize` minimal.
+- **Avoid jargon / over-explaining** in commits and prose.
 - **Commits:** conventional style; **never** add an agent as co-author.
-- **Packaging:** run-in-place via `PYTHONPATH`; no setuptools/build backend unless a
-  real need appears.
-
-## Suggested skills for the next session
-
-- **`tdd`** — Stage 5 is pure logic; ideal for red-green-refactor. Start here.
-- **`verify`** — after Stage 5 (and especially Stage 6), verify by exercising the flow
-  on `test_audio/` fixtures, not just unit tests.
-- **`code-review`** — before committing the phase, review the diff against the repo's
-  standards.
+- **Packaging:** run-in-place via `PYTHONPATH`; no build backend.
 
 ## Open item
 
-`git push` was requested but there is **no remote** and `gh` is not authenticated, so
-nothing was pushed. To publish: `gh auth login`, create a remote (e.g.
-`gh repo create bleep-pipeline --private --source . --remote origin`), then `git push -u origin main`.
+`git push` was requested earlier but there is **no remote** and `gh` is not
+authenticated, so nothing was pushed. To publish: `gh auth login`, create a
+remote (e.g. `gh repo create bleep-pipeline --private --source . --remote origin`),
+then `git push -u origin main`.
