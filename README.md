@@ -78,3 +78,8 @@ safe (the Scunthorpe problem).
   spans that overlap after inset.
 - Stage 6: the bleep renderer (1 kHz tone + duck + splice into the original).
 - Phonetic safety net for words the ASR mis-transcribes (the main false-negative risk).
+
+## License
+
+MIT — see [LICENSE](LICENSE). Permissive; requires that the copyright and
+permission notice be preserved in copies (attribution).
