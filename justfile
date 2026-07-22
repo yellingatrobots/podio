@@ -23,3 +23,7 @@ normalize audio out="normalized.wav":
 # Requires `just setup-asr` first (uses the venv for the ML deps).
 manifest audio out="manifest.json" wordlist="config/wordlist.yaml":
     PYTHONPATH=src .venv/bin/python -m bleep.cli manifest {{audio}} --out {{out}} --wordlist {{wordlist}}
+
+# Render censored audio from a manifest (1 kHz bleep tone). No ASR deps needed.
+bleep audio manifest out="censored.wav":
+    python -m bleep.cli bleep {{audio}} {{manifest}} --out {{out}}

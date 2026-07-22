@@ -41,6 +41,12 @@ Detected spans are post-processed (Stage 5) before the manifest is written.
 `--inset SECONDS` (default 0.03) sets how far each span edge is shrunk inward;
 `--inset 0` disables the shrink.
 
+Render the censored audio from a manifest (no ASR deps needed):
+
+```sh
+just bleep input.mp3 manifest.json out.wav    # -> out.wav with 1 kHz bleeps
+```
+
 Each `manifest` run writes two files: the manifest (spans to bleep) and a
 sibling `*.transcript.json` (the full word list with timestamps) — the lean
 edit-list and the auditable record, respectively. `out.json` yields
@@ -85,10 +91,20 @@ list — a pure function over `CensorSpan`s, no audio or models:
 - Spans that still overlap after inset are merged into one; the merged span joins
   both words' `term` and `source_text` and takes the minimum `confidence`.
 
+## Rendering (Stage 6)
+
+`render.py` consumes a manifest and the original audio and writes censored audio.
+Under each span the original is replaced with a 1 kHz sine tone; everything
+outside the spans is spliced back untouched. The source is decoded to mono
+16-bit PCM at its native sample rate (full quality, not the 16 kHz ASR
+downsample). The tone's phase restarts at each span onset so a bleep begins at
+zero. The sample-level splice is a pure function; the file I/O is a thin ffmpeg +
+WAV wrapper around it.
+
 ## Not yet built
 
-- Stage 6: the bleep renderer (1 kHz tone + duck + splice into the original).
 - Phonetic safety net for words the ASR mis-transcribes (the main false-negative risk).
+- Preserving the source's channel layout/codec on output (currently renders mono WAV).
 
 ## License
 
