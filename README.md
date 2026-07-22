@@ -29,6 +29,20 @@ demand into a local venv:
 just setup-asr         # uv venv .venv + whisperx
 ```
 
+### About WhisperX
+
+[WhisperX](https://github.com/m-bain/whisperX) (BSD-2, by Max Bain, out of
+academic ASR research) wraps OpenAI's [Whisper](https://github.com/openai/whisper)
+and adds the **accurate word-level timestamps** this pipeline needs — plain
+Whisper only gives coarse segment timing. It does forced alignment on top of the
+transcription (and uses the faster `faster-whisper` backend).
+
+**First run downloads model weights** (the Whisper model, an alignment model, and
+a VAD model) from Hugging Face, so `manifest`/`censor` need network access once;
+after the weights are cached the pipeline runs offline. This is a large ML
+dependency tree (torch, transformers, pyannote) installed via `uv` into `.venv` —
+standard for local ASR, but worth knowing what you're pulling in.
+
 ## Run
 
 One-shot — detect and bleep in a single step, then play the result:
