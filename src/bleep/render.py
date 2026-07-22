@@ -25,7 +25,7 @@ def bleep_pcm(
     spans: Iterable[Tuple[float, float]],
     *,
     freq: float = 1000.0,
-    amplitude: int = 16000,
+    amplitude: int = 12000,
 ) -> array:
     """Return a copy of `samples` with a sine tone over each (start, end) span.
 
@@ -51,7 +51,7 @@ def render_file(
     out_path,
     *,
     freq: float = 1000.0,
-    amplitude: int = 16000,
+    amplitude: int = 12000,
 ) -> Path:
     """Bleep `audio_src` per the spans in `manifest_path`, write a WAV to `out_path`.
 
