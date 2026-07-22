@@ -28,7 +28,6 @@ class CensorSpan:
     start: float
     end: float
     term: str          # the matched list entry (canonical form)
-    severity: str
     source_text: str   # what the ASR actually transcribed
     confidence: float
 

@@ -47,15 +47,15 @@ A manifest span looks like:
 ```json
 {
   "start": 12.34, "end": 12.71,
-  "term": "fuck", "severity": "high",
+  "term": "fuck",
   "source_text": "Fuck!", "confidence": 0.98
 }
 ```
 
 ## Wordlist
 
-`config/wordlist.yaml` is a configurable blocklist with per-term severity and an
-`allowlist` for whole-word exceptions. Matching is whole-word / whole-phrase and
+`config/wordlist.yaml` is a configurable blocklist with an `allowlist` for
+whole-word exceptions. Matching is whole-word / whole-phrase and
 case/punctuation-insensitive — never substrings, so "class" and "assassin" are
 safe (the Scunthorpe problem).
 
@@ -69,13 +69,20 @@ safe (the Scunthorpe problem).
 - **Manifest is audio-agnostic.** Detection produces an edit list; rendering is
   a later, separate concern.
 
+## Span post-processing (Stage 5)
+
+`postprocess.py` transforms the raw `find_spans` output into a render-ready edit
+list — a pure function over `CensorSpan`s, no audio or models:
+
+- **No padding, a negative inset.** Each span is shrunk inward by `inset` seconds
+  on each edge so the onset of the first consonant and the tail of the last stay
+  audible (hear the "f" and "k" of "fuck"). The inset is a parameter.
+- Spans that collapse to <= 0 width after inset are dropped.
+- Spans that still overlap after inset are merged into one; the merged span joins
+  both words' `term` and `source_text` and takes the minimum `confidence`.
+
 ## Not yet built
 
-- Stage 5: span post-processing. Intended behavior: **no padding.** A slight
-  negative inset (shrinkage) so the onset of the first consonant and the tail of
-  the last stay audible (hear the "f" and "k" of "fuck"). Snap each voice<->bleep
-  transition to a zero-crossing (or a ~2-3ms micro-fade) to avoid clicks. Merge
-  spans that overlap after inset.
 - Stage 6: the bleep renderer (1 kHz tone + duck + splice into the original).
 - Phonetic safety net for words the ASR mis-transcribes (the main false-negative risk).
 

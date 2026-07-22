@@ -22,7 +22,6 @@ class Entry:
     """One wordlist rule."""
 
     term: str                # canonical/display term
-    severity: str
     tokens: Tuple[str, ...]  # normalized token(s); >1 means a phrase
 
 
@@ -42,9 +41,8 @@ class WordList:
         phrases: List[Entry] = []
         for raw in data.get("terms", []):
             term = raw["term"]
-            severity = raw.get("severity", "medium")
             tokens = tuple(normalize(t) for t in term.split())
-            entry = Entry(term=term, severity=severity, tokens=tokens)
+            entry = Entry(term=term, tokens=tokens)
             if len(tokens) > 1:
                 phrases.append(entry)
             else:
@@ -95,7 +93,6 @@ def find_spans(words: Sequence[Word], wordlist: WordList) -> List[CensorSpan]:
                 start=matched[0].start,
                 end=matched[-1].end,
                 term=entry.term,
-                severity=entry.severity,
                 source_text=" ".join(w.text for w in matched),
                 confidence=min(w.confidence for w in matched),
             )

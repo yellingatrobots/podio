@@ -5,9 +5,9 @@ WL = WordList.from_dict(
     {
         "allowlist": ["class", "assassin"],
         "terms": [
-            {"term": "fuck", "severity": "high"},
-            {"term": "damn", "severity": "low"},
-            {"term": "son of a bitch", "severity": "medium"},
+            {"term": "fuck"},
+            {"term": "damn"},
+            {"term": "son of a bitch"},
         ],
     }
 )
@@ -50,7 +50,7 @@ def test_detects_multiword_phrase():
 
 def test_allowlist_blocks_a_listed_term():
     wl = WordList.from_dict(
-        {"allowlist": ["damn"], "terms": [{"term": "damn", "severity": "low"}]}
+        {"allowlist": ["damn"], "terms": [{"term": "damn"}]}
     )
     assert find_spans(words("oh", "damn"), wl) == []
 
