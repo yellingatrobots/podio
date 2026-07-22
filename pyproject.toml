@@ -1,0 +1,7 @@
+# No build-system on purpose: this project is run in place (via PYTHONPATH),
+# not installed as a package. This file only carries pytest config and records
+# the ASR extra for documentation. Runtime deps come from nix (`flake.nix`);
+# the heavy ASR stack is installed via `just setup-asr`.
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]

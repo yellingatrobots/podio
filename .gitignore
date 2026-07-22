@@ -1,0 +1,17 @@
+# nix
+result
+result-*
+.direnv/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# pipeline outputs
+manifest*.json
+*.transcript.json
+normalized.wav
+*.wav

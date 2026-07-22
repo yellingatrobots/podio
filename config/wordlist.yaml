@@ -1,0 +1,40 @@
+# Configurable profanity wordlist for the detection pass.
+#
+# Matching is whole-word (or whole-phrase), case- and punctuation-insensitive.
+# `severity` is carried through to the manifest for downstream policy; it does
+# not affect whether a span is produced. `match` is inferred: a term with
+# spaces is a phrase, otherwise a single word.
+#
+# allowlist: whole words that must NEVER be bleeped, even if a rule would match
+# (guards against the Scunthorpe problem for edge cases you discover).
+
+allowlist:
+  - class
+  - assassin
+  - cockpit
+  - shiitake
+
+terms:
+  # FCC "seven dirty words" core + common variants
+  - { term: fuck,        severity: high }
+  - { term: fucking,     severity: high }
+  - { term: fucker,      severity: high }
+  - { term: motherfucker, severity: high }
+  - { term: shit,        severity: high }
+  - { term: bullshit,    severity: medium }
+  - { term: piss,        severity: medium }
+  - { term: cunt,        severity: high }
+  - { term: cocksucker,  severity: high }
+  - { term: tits,        severity: medium }
+
+  # additional common profanity
+  - { term: asshole,     severity: high }
+  - { term: bitch,       severity: medium }
+  - { term: bastard,     severity: medium }
+  - { term: dick,        severity: medium }
+  - { term: prick,       severity: medium }
+  - { term: damn,        severity: low }
+  - { term: goddamn,     severity: medium }
+
+  # multi-word phrases
+  - { term: son of a bitch, severity: medium }
