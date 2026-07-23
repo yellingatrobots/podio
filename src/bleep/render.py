@@ -53,15 +53,22 @@ def render_file(
     freq: float = 1000.0,
     amplitude: int = 12000,
 ) -> Path:
-    """Bleep `audio_src` per the spans in `manifest_path`, write a WAV to `out_path`.
+    """Bleep `audio_src` per the spans in `manifest_path`, write it to `out_path`.
 
     The source is decoded to mono 16-bit PCM at its native rate (full quality,
-    not the 16 kHz ASR downsample), bleeped, and written back as a WAV.
+    not the 16 kHz ASR downsample) and bleeped. A ``.wav`` `out_path` is written
+    directly; any other extension (e.g. ``.mp4``, ``.m4a``) is produced by
+    muxing the bleeped audio back over the source with ffmpeg — the video stream
+    is copied through untouched and only the audio is replaced.
     """
     spans = _load_spans(manifest_path)
     sample_rate, samples = _decode_pcm(audio_src)
     out = bleep_pcm(samples, sample_rate, spans, freq=freq, amplitude=amplitude)
-    return _write_wav(out_path, sample_rate, out)
+
+    out_path = Path(out_path)
+    if out_path.suffix.lower() == ".wav":
+        return _write_wav(out_path, sample_rate, out)
+    return _mux_over_source(audio_src, out_path, sample_rate, out)
 
 
 def _load_spans(manifest_path) -> List[Tuple[float, float]]:
@@ -83,6 +90,32 @@ def _decode_pcm(src) -> Tuple[int, array]:
     samples = array("h")
     samples.frombytes(raw)
     return sample_rate, samples
+
+
+def _encode_command(audio_src, censored_wav, out_path) -> List[str]:
+    """ffmpeg args to mux `censored_wav`'s audio over `audio_src`'s video."""
+    return [
+        "ffmpeg", "-y",
+        "-i", str(audio_src),
+        "-i", str(censored_wav),
+        "-map", "0:v?", "-map", "1:a",
+        "-c:v", "copy", "-c:a", "aac",
+        "-shortest",
+        str(out_path),
+    ]
+
+
+def _mux_over_source(audio_src, out_path, sample_rate: int, samples: array) -> Path:
+    """Write `samples` to a temp WAV, then mux it over `audio_src` into `out_path`.
+
+    Video (if any) is copied through unchanged; the audio track is replaced with
+    the bleeped one and encoded to AAC.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        censored = str(Path(tmp) / "censored.wav")
+        _write_wav(censored, sample_rate, samples)
+        _run_ffmpeg(_encode_command(audio_src, censored, out_path), audio_src)
+    return Path(out_path)
 
 
 def _run_ffmpeg(cmd: Sequence[str], src) -> None:

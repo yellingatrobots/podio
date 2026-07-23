@@ -1,6 +1,22 @@
 import math
 
-from bleep.render import bleep_pcm
+from bleep.render import _encode_command, bleep_pcm
+
+
+def test_encode_command_muxes_censored_audio_over_source_video():
+    cmd = _encode_command("in.mp4", "/tmp/censored.wav", "out.mp4")
+
+    assert cmd == [
+        "ffmpeg", "-y",
+        "-i", "in.mp4",          # input 0: the original (video kept)
+        "-i", "/tmp/censored.wav",  # input 1: the bleeped audio
+        "-map", "0:v?",          # copy any video stream(s) from the source
+        "-map", "1:a",           # take audio only from the censored track
+        "-c:v", "copy",          # never re-encode the video
+        "-c:a", "aac",           # encode the replacement audio
+        "-shortest",
+        "out.mp4",
+    ]
 
 
 def test_bleep_replaces_samples_inside_span_and_leaves_the_rest():

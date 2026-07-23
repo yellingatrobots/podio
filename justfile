@@ -26,7 +26,9 @@ normalize audio out="normalized.wav":
 manifest audio out="manifest.json" model="base.en" min_confidence="0" wordlist="config/wordlist.yaml":
     PYTHONPATH=src .venv/bin/python -m bleep.cli manifest "{{audio}}" --out "{{out}}" --wordlist "{{wordlist}}" --model {{model}} --min-confidence {{min_confidence}}
 
-# Render censored audio from a manifest (1 kHz bleep tone). No ASR deps needed.
+# Render a censored copy from a manifest (1 kHz bleep tone). No ASR deps needed.
+# Output format follows `out`'s extension: .wav writes audio directly; .mp4/.m4a
+# remux the bleeped audio over the source (video copied through untouched).
 bleep audio manifest out="censored.wav":
     python -m bleep.cli bleep "{{audio}}" "{{manifest}}" --out "{{out}}"
 

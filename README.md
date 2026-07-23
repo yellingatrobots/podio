@@ -58,6 +58,7 @@ Or the two stages separately, so you can review/edit the manifest between them:
 just manifest input.mp3                    # -> manifest.json (default: base.en)
 just manifest input.mp3 m.json model=large-v3  # higher accuracy, slower
 just bleep input.mp3 m.json out.wav        # render from the (edited) manifest
+just bleep riverside.mp4 m.json out.mp4    # video kept, audio bleeped (.mp4/.m4a)
 just normalize input.mp3                   # debug: -> normalized.wav (16kHz mono)
 ```
 
@@ -119,18 +120,27 @@ list — a pure function over `CensorSpan`s, no audio or models:
 
 ## Rendering (Stage 6)
 
-`render.py` consumes a manifest and the original audio and writes censored audio.
-Under each span the original is replaced with a 1 kHz sine tone; everything
+`render.py` consumes a manifest and the original media and writes a censored
+copy. Under each span the original is replaced with a 1 kHz sine tone; everything
 outside the spans is spliced back untouched. The source is decoded to mono
 16-bit PCM at its native sample rate (full quality, not the 16 kHz ASR
 downsample). The tone's phase restarts at each span onset so a bleep begins at
 zero. The sample-level splice is a pure function; the file I/O is a thin ffmpeg +
 WAV wrapper around it.
 
+The output format follows the `out` extension. A `.wav` path is written directly
+(mono PCM). Any other extension (e.g. `.mp4`, `.m4a`) is produced by muxing the
+bleeped audio back over the source with ffmpeg: any **video stream is copied
+through untouched** and only the audio track is replaced (re-encoded to AAC). So
+`just bleep riverside.mp4 m.json out.mp4` returns the original video with the
+audio bleeped. The replacement audio is currently mono, so a stereo source is
+downmixed.
+
 ## Not yet built
 
 - Phonetic safety net for words the ASR mis-transcribes (the main false-negative risk).
-- Preserving the source's channel layout/codec on output (currently renders mono WAV).
+- Preserving the source's channel layout on output (the audio track is remuxed
+  into the original container/video, but the replacement audio is a mono downmix).
 
 ## License
 
