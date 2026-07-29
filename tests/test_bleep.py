@@ -1,6 +1,6 @@
 import math
 
-from podio.render import _encode_command, bleep_pcm
+from podio.bleep import _encode_command, bleep_pcm
 
 
 def test_encode_command_muxes_censored_audio_over_source_video():

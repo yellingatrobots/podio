@@ -1,4 +1,4 @@
-from podio.model import Word
+from podio.manifest import Word
 from podio.wordlist import WordList, find_spans
 
 WL = WordList.from_dict(

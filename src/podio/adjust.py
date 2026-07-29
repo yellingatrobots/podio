@@ -1,4 +1,4 @@
-"""Stage 5: post-process censor spans before rendering.
+"""Adjust detected spans into a render-ready edit list.
 
 Pure transformation of the ``find_spans`` output — no audio or models. Applies a
 negative inset (shrinkage) so the onset of the first consonant and the tail of
@@ -10,10 +10,10 @@ from __future__ import annotations
 import dataclasses
 from typing import List, Sequence
 
-from .model import CensorSpan
+from .manifest import CensorSpan
 
 
-def postprocess_spans(
+def adjust_spans(
     spans: Sequence[CensorSpan], inset: float = 0.03
 ) -> List[CensorSpan]:
     """Inset each span, drop collapsed ones, and merge overlaps."""

@@ -13,7 +13,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import yaml
 
-from .model import CensorSpan, Word
+from .manifest import CensorSpan, Word
 from .text import normalize
 
 

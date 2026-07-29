@@ -1,4 +1,4 @@
-"""Stage 6: the bleep renderer.
+"""Splice the tone over every span in a manifest.
 
 Splices a 1 kHz tone over each censor span. The sample-level work is a pure
 function over mono PCM (unit-tested); the file I/O wrapper (ffmpeg decode +

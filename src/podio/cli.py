@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 
 from .audio import normalize_audio
-from .pipeline import transcribe_and_detect
-from .render import render_file
+from .detect import transcribe_and_detect
+from .bleep import render_file
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 

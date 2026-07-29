@@ -1,4 +1,4 @@
-"""Core data types passed between pipeline stages."""
+"""Core data types passed between stages."""
 
 from __future__ import annotations
 

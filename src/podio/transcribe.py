@@ -13,7 +13,7 @@ import time
 from contextlib import contextmanager
 from typing import Iterator, List, Protocol
 
-from .model import Word
+from .manifest import Word
 
 
 @contextmanager
