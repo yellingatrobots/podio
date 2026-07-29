@@ -8,6 +8,7 @@ ML stack is only touched when actually transcribing.
 from __future__ import annotations
 
 import sys
+import warnings
 import threading
 import time
 from contextlib import contextmanager
@@ -40,6 +41,28 @@ def _heartbeat(label: str, interval: float = 15.0) -> Iterator[None]:
         thread.join(timeout=1.0)
 
 
+@contextmanager
+def _without_torchcodec_warning() -> Iterator[None]:
+    """Silence pyannote's warning that torchcodec cannot decode audio.
+
+    Nothing here asks it to. `whisperx.load_audio` shells out to the ffmpeg CLI
+    and the waveform is passed on as an array, so pyannote is never handed a
+    path to open — the warning fires from an import, not from a failure.
+
+    It is also not fixable where podio runs: torchcodec wants FFmpeg 4-7
+    (libavutil.56-59), podio pins ffmpeg 8 because it parses that version's
+    output, and the shipped dylibs carry no LC_RPATH to find a libavutil with
+    anyway. Only this one message is filtered; everything else still surfaces.
+    """
+    with warnings.catch_warnings():
+        # (?s) so . spans newlines: filterwarnings anchors its pattern at the
+        # start of the message, and this one opens with a blank line.
+        warnings.filterwarnings(
+            "ignore", message="(?s).*torchcodec is not installed correctly.*"
+        )
+        yield
+
+
 class Transcriber(Protocol):
     """Turns an audio file into timestamped words."""
 
@@ -70,28 +93,29 @@ class WhisperXTranscriber:
         self.threads = threads
 
     def transcribe(self, audio_path: str) -> List[Word]:
-        import whisperx  # lazy: keeps torch out of the pure path
+        with _without_torchcodec_warning():
+            import whisperx  # lazy: keeps torch out of the pure path
 
-        # WhisperX operates on a loaded waveform, not a path.
-        audio = whisperx.load_audio(audio_path)
+            # WhisperX operates on a loaded waveform, not a path.
+            audio = whisperx.load_audio(audio_path)
 
-        model = whisperx.load_model(
-            self.model_size,
-            self.device,
-            compute_type=self.compute_type,
-            language=self.language,
-            threads=self.threads,
-        )
-        with _heartbeat("transcribing (VAD + ASR)"):
-            result = model.transcribe(audio)
-
-        align_model, meta = whisperx.load_align_model(
-            language_code=self.language, device=self.device
-        )
-        with _heartbeat("aligning word timestamps"):
-            aligned = whisperx.align(
-                result["segments"], align_model, meta, audio, self.device
+            model = whisperx.load_model(
+                self.model_size,
+                self.device,
+                compute_type=self.compute_type,
+                language=self.language,
+                threads=self.threads,
             )
+            with _heartbeat("transcribing (VAD + ASR)"):
+                result = model.transcribe(audio)
+
+            align_model, meta = whisperx.load_align_model(
+                language_code=self.language, device=self.device
+            )
+            with _heartbeat("aligning word timestamps"):
+                aligned = whisperx.align(
+                    result["segments"], align_model, meta, audio, self.device
+                )
 
         words: List[Word] = []
         for segment in aligned["segments"]:
