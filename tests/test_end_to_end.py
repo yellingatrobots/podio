@@ -73,20 +73,20 @@ def run_on(episode: Path, *extra: str) -> int:
     )
 
 
-def test_a_clean_track_lands_on_the_working_level(episode):
+def test_a_prepped_take_lands_on_the_working_level(episode):
     assert run_on(episode) == 0
 
-    integrated, peak = loudness_of(episode / "alex_clean.wav")
+    integrated, peak = loudness_of(episode / "alex_prepped.wav")
     assert integrated == pytest.approx(-20.0, abs=0.5)
     assert peak < -3.0
 
 
-def test_the_clean_track_is_24_bit_48k_mono(episode):
+def test_the_prepped_take_is_24_bit_48k_mono(episode):
     run_on(episode)
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
          "stream=codec_name,sample_rate,channels", "-of", "csv=p=0",
-         str(episode / "alex_clean.wav")],
+         str(episode / "alex_prepped.wav")],
         capture_output=True, text=True, check=True,
     )
     assert probe.stdout.strip() == "pcm_s24le,48000,1"
@@ -97,7 +97,7 @@ def test_the_run_records_what_it_measured(episode):
     sidecar = tomllib.loads((episode / "audio.analysis.toml").read_text())
 
     assert sidecar["working_level_db"] == -20.0
-    assert sidecar["alex"]["output"] == "alex_clean.wav"
+    assert sidecar["alex"]["output"] == "alex_prepped.wav"
     assert sidecar["alex"]["chain"].startswith("aresample=48000,highpass=f=80")
     assert not sidecar["alex"]["clamped"]
 
@@ -107,10 +107,10 @@ def test_an_audition_writes_a_separate_short_file(episode):
 
     audition = episode / "alex_audition.wav"
     assert audition.exists()
-    assert not (episode / "alex_clean.wav").exists()
+    assert not (episode / "alex_prepped.wav").exists()
 
 
 def test_a_dry_run_measures_but_writes_nothing(episode):
     assert run_on(episode, "--dry-run") == 0
-    assert not (episode / "alex_clean.wav").exists()
+    assert not (episode / "alex_prepped.wav").exists()
     assert not (episode / "audio.analysis.toml").exists()

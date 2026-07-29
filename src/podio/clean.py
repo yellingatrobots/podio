@@ -43,7 +43,7 @@ def process(
     )
     measured = Measured(floor_db=floor)
     chain = build_chain(take.chain, measured, models_dir)
-    suffix = "_audition" if audition else "_clean"
+    suffix = "_audition" if audition else "_prepped"
     output = take.source.parent / f"{take.name}{suffix}.wav"
     report(f"{take.name:6} floor {floor:7.1f} dB")
 
