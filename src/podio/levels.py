@@ -10,10 +10,11 @@ from dataclasses import dataclass
 AUTO_VALUE = re.compile(r"^([a-z_]+)(?:\s*([+-])\s*([\d.]+))?$")
 #: 20*log10(sqrt(2)) — how far a sine's peak sits above its RMS.
 SINE_PEAK_OVER_RMS_DB = 3.0102999566398120
-#: Used where there is no episode to read a working level from. Three dB under
-#: the default -24 working level: audible as a bleep without being the loudest
-#: thing in the episode.
-DEFAULT_TONE_LEVEL_DB = -27.0
+#: Fixed, not derived. Three dB under the -24 working level the clean step
+#: brings takes to, which puts the tone's peak at -24 dBFS: plainly audible
+#: against speech, nowhere near the peak ceiling, and not the loudest thing in
+#: the episode. Change it here if the working level ever moves.
+TONE_LEVEL_DB = -27.0
 
 
 @dataclass(frozen=True)
@@ -41,12 +42,11 @@ def db_to_linear(db: float) -> float:
     return 10.0 ** (db / 20.0)
 
 
-def _resolve(value: float | str, references: dict[str, float], example: str) -> float:
+def resolve_db(value: float | str, measured: Measured) -> float:
     """Resolve a dB parameter that may be a number or an auto value.
 
-    Auto values are a named reference with an optional offset, e.g. "floor+12"
-    — read as "twelve dB above this take's noise floor". Which references are
-    available depends on what is being resolved, so the caller supplies them.
+    Auto values are a measurement reference with an optional offset, e.g.
+    "floor+12" — read as "twelve dB above this take's noise floor".
     """
     if not isinstance(value, str):
         return float(value)
@@ -61,34 +61,18 @@ def _resolve(value: float | str, references: dict[str, float], example: str) -> 
     if not match:
         raise ValueError(
             f"cannot read {value!r} as a dB value; expected a number or "
-            f"a reference like {example!r}"
+            f"a reference like 'floor+12'"
         )
 
     name, sign, offset = match.groups()
-    if name not in references:
+    if name != "floor":
         raise ValueError(
-            f"unknown reference {name!r} in auto value; here you can use "
-            f"{', '.join(sorted(references))}"
+            f"unknown reference {name!r} in auto value; only 'floor' is available"
         )
-    base = references[name]
+    base = measured.floor_db
     if offset is None:
         return base
     return base + (float(offset) if sign == "+" else -float(offset))
-
-
-def resolve_db(value: float | str, measured: Measured) -> float:
-    """Resolve a stage's dB parameter against what was measured for this take."""
-    return _resolve(value, {"floor": measured.floor_db}, "floor+12")
-
-
-def resolve_tone_db(value: float | str, working_level_db: float) -> float:
-    """Resolve the tone level, which is placed against the working level.
-
-    Deliberately not against the noise floor: the tone has to sit correctly
-    with respect to the speech around it, and the speech is at the working
-    level by the time anything gets spliced.
-    """
-    return _resolve(value, {"working": working_level_db}, "working-3")
 
 
 def tone_amplitude(tone_level_db: float, full_scale: int) -> int:

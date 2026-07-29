@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
 from . import ffmpeg
-from .levels import DEFAULT_TONE_LEVEL_DB, tone_amplitude
+from .levels import TONE_LEVEL_DB, tone_amplitude
 
 INT32_MIN, INT32_MAX = -2_147_483_648, 2_147_483_647
-#: Callers that know the working level pass their own; this is the fallback.
-DEFAULT_AMPLITUDE = tone_amplitude(DEFAULT_TONE_LEVEL_DB, INT32_MAX)
+#: The tone's peak sample value, fixed at TONE_LEVEL_DB.
+TONE_AMPLITUDE = tone_amplitude(TONE_LEVEL_DB, INT32_MAX)
 
 
 def bleep_pcm(
@@ -28,7 +28,7 @@ def bleep_pcm(
     spans: Iterable[Tuple[float, float]],
     *,
     freq: float = 1000.0,
-    amplitude: int = DEFAULT_AMPLITUDE,
+    amplitude: int = TONE_AMPLITUDE,
 ) -> array:
     """Return a copy of `samples` with a sine tone over each (start, end) span.
 
@@ -54,7 +54,7 @@ def render_file(
     out_path,
     *,
     freq: float = 1000.0,
-    amplitude: int = DEFAULT_AMPLITUDE,
+    amplitude: int = TONE_AMPLITUDE,
 ) -> Path:
     """Bleep `audio_src` per the spans in `manifest_path`, write it to `out_path`.
 

@@ -137,7 +137,6 @@ def test_a_take_is_censored_by_default(tmp_path):
     censor = load_episode(config, rigs).takes[0].censor
 
     assert censor.enabled is True
-    assert censor.tone_level_db == "working-3"
     assert censor.wordlist is None
 
 
@@ -197,32 +196,6 @@ def test_a_take_censor_block_is_not_read_as_a_stage_override(tmp_path):
     take = load_episode(config, rigs).takes[0]
 
     assert [s["name"] for s in take.chain] == ["highpass", "afftdn"]
-
-
-def test_a_take_inherits_the_episode_tone_level_and_can_override_it(tmp_path):
-    config, rigs = write_episode(
-        tmp_path,
-        """
-        [censor]
-        tone_level_db = "working-6"
-
-        [takes.ian]
-        file = "ian.wav"
-        rig = "ian"
-
-        [takes.josh]
-        file = "josh.wav"
-        rig = "ian"
-
-        [takes.josh.censor]
-        tone_level_db = -30.0
-        """,
-        {"ian": IAN_RIG},
-    )
-    ian, josh = load_episode(config, rigs).takes
-
-    assert ian.censor.tone_level_db == "working-6"
-    assert josh.censor.tone_level_db == -30.0
 
 
 def test_a_wordlist_override_resolves_against_the_episode_directory(tmp_path):

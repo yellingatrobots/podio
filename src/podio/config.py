@@ -23,8 +23,6 @@ class Censor:
     """Whether and how a take gets censored. Overridable per take."""
 
     enabled: bool = True
-    #: dBFS, or an auto value relative to the working level ("working-3").
-    tone_level_db: str | float = "working-3"
     #: None means the wordlist shipped with the tool.
     wordlist: Path | None = None
 
@@ -87,7 +85,6 @@ def _load_censor(table: Spec, inherited: Censor, episode_dir: Path) -> Censor:
     wordlist = table.get("wordlist")
     return Censor(
         enabled=bool(table.get("enabled", inherited.enabled)),
-        tone_level_db=table.get("tone_level_db", inherited.tone_level_db),
         wordlist=episode_dir / wordlist if wordlist else inherited.wordlist,
     )
 

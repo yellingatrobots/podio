@@ -134,21 +134,20 @@ recording:
 
 ```toml
 [censor]
-enabled       = true          # default; false leaves the episode uncensored
-tone_level_db = "working-3"   # default; or a fixed dBFS number
-wordlist      = "extra.toml"  # optional, relative to the episode directory
+enabled  = true           # default; false leaves the episode uncensored
+wordlist = "extra.toml"   # optional, relative to the episode directory
 
 [takes.ian.censor]
-enabled = false               # this take only
+enabled = false           # this take only
 ```
 
-`tone_level_db` is the tone's **RMS** level and, like every other dB value here,
-may be an auto value — `"working-3"` means three dB under the working level, so
-the bleep tracks the level the takes were brought to. A sine peaks 3 dB above
-its RMS, so at the default `-24` working level the tone peaks at −24 dBFS: well
-clear of the peak ceiling, plainly audible, and not the loudest thing in the
-episode. Equal-RMS with speech reads as *louder* than speech, because the tone
-is continuous, narrowband, and near the ear's most sensitive region.
+The tone itself is not configurable. It is fixed at −27 dBFS RMS, three dB under
+the −24 working level the clean step brings every take to, which puts its peak at
+−24 dBFS — plainly audible against speech, nowhere near the peak ceiling, and not
+the loudest thing in the episode. Equal-RMS with speech would read as *louder*
+than speech, because the tone is continuous, narrowband, and near the ear's most
+sensitive region. If the working level ever moves, change `TONE_LEVEL_DB` in
+`levels.py` with it.
 
 ### Wordlist
 

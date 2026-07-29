@@ -5,7 +5,6 @@ from podio.levels import (
     db_to_linear,
     gain_match,
     resolve_db,
-    resolve_tone_db,
     tone_amplitude,
 )
 
@@ -43,21 +42,6 @@ def test_resolve_tolerates_whitespace():
 def test_resolve_rejects_unknown_reference():
     with pytest.raises(ValueError, match="ceiling"):
         resolve_db("ceiling+12", IAN)
-
-
-def test_a_tone_level_resolves_against_the_working_level():
-    assert resolve_tone_db("working-3", working_level_db=-24.0) == pytest.approx(-27.0)
-    assert resolve_tone_db("working", working_level_db=-24.0) == pytest.approx(-24.0)
-
-
-def test_a_tone_level_can_be_a_fixed_number():
-    assert resolve_tone_db(-30.0, working_level_db=-24.0) == pytest.approx(-30.0)
-
-
-def test_a_tone_level_cannot_reference_the_noise_floor():
-    """The tone is placed against the working level, not against the room."""
-    with pytest.raises(ValueError, match="floor"):
-        resolve_tone_db("floor+12", working_level_db=-24.0)
 
 
 def test_tone_amplitude_is_the_peak_of_a_sine_at_that_rms():
