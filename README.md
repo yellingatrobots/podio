@@ -50,7 +50,11 @@ default `base.en`) from Hugging Face; after that it runs offline.
 ## Cleaning an episode
 
 1. Put the raw WAVs in the episode directory (`ian.wav`, `josh.wav`).
-2. Create `audio.toml` beside them:
+2. Run `podio run`. With no `audio.toml` there it shows you one built from the
+   takes it found and offers to write it — each `.wav` becomes a take pointed at
+   the rig of the same name, and podio's own outputs are never mistaken for
+   takes. Decline, and you get the usual missing-config error and can write it
+   yourself:
 
 ```toml
 # Episode NN.

@@ -10,11 +10,13 @@ import argparse
 import os
 import sys
 import tempfile
+import textwrap
 from pathlib import Path
 
 from . import censor, ffmpeg
 from .bleep import render_file
 from .clean import ROOT, clean_all, clean_episode, report
+from .config import scaffold
 from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
@@ -67,8 +69,38 @@ def _cmd_detect(args) -> int:
     return 0
 
 
+def _confirm_stub(proposed: str) -> bool:
+    report(f"There is no {Path('audio.toml')} here. podio can write this:\n")
+    report(textwrap.indent(proposed.rstrip(), "    "))
+    try:
+        return input("\nwrite it? [y/N] ").strip().lower() in {"y", "yes"}
+    except EOFError:
+        return False
+
+
+def _offer_stub(args) -> None:
+    """Offer to scaffold a missing audio.toml, when someone is there to ask.
+
+    Declining, or not being asked at all, falls through to the ordinary missing
+    config error — this only ever adds a way forward, never a new failure.
+    """
+    if args.config.exists() or not sys.stdin.isatty():
+        return
+    try:
+        if scaffold(args.config, args.rigs, ask=_confirm_stub):
+            report(f"wrote {args.config}")
+    except ValueError as error:
+        report(f"error: {error}")
+
+
+def _cmd_clean(args) -> int:
+    _offer_stub(args)
+    return clean_episode(args)
+
+
 def _cmd_run(args) -> int:
     """Clean every take, then censor the ones that asked for it."""
+    _offer_stub(args)
     try:
         episode, results = clean_all(args)
     except (ValueError, RuntimeError) as error:
@@ -191,7 +223,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     p_clean = sub.add_parser("clean", help="clean an episode's takes -> prepped takes")
     add_clean_arguments(p_clean)
-    p_clean.set_defaults(func=clean_episode)
+    p_clean.set_defaults(func=_cmd_clean)
 
     p_norm = sub.add_parser("normalize", help="decode audio to 16kHz mono wav")
     p_norm.add_argument("audio")

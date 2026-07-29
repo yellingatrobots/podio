@@ -11,6 +11,11 @@ from pathlib import Path
 from typing import Any
 
 TAKE_KEYS = {"file", "rig", "limiter"}
+#: What podio itself writes into an episode directory. Never a take.
+OUTPUT_SUFFIXES = ("_prepped", "_censored", "_audition")
+#: What a scaffolded episode starts at. Low enough to leave the NLE room.
+DEFAULT_WORKING_LEVEL_DB = -24.0
+DEFAULT_PEAK_CEILING_DB = -2.0
 #: Take sub-tables that configure something other than a stage of the chain,
 #: and so must not be matched against the rig's stage names.
 NON_STAGE_TABLES = {"censor"}
@@ -41,6 +46,58 @@ class Episode:
     working_level_db: float
     peak_ceiling_db: float
     takes: list[Take]
+
+
+def stub_toml(episode_dir: Path, rigs_dir: Path) -> str:
+    """An audio.toml for the takes sitting in `episode_dir`.
+
+    Every .wav that isn't something podio wrote becomes a take, pointed at the
+    rig named after it where one exists. A take whose rig is missing is still
+    listed — with a comment, because that is a decision for whoever recorded it,
+    not one to guess at.
+    """
+    takes = sorted(
+        p for p in Path(episode_dir).glob("*.wav")
+        if not p.stem.endswith(OUTPUT_SUFFIXES)
+    )
+    if not takes:
+        raise ValueError(f"no .wav takes found in {episode_dir}")
+
+    rigs = {p.stem for p in Path(rigs_dir).glob("*.toml")}
+    lines = [
+        "# Written by podio. Adjust and re-run.",
+        "",
+        f"working_level_db = {DEFAULT_WORKING_LEVEL_DB}",
+        f"peak_ceiling_db  = {DEFAULT_PEAK_CEILING_DB}",
+    ]
+    for take in takes:
+        lines += ["", f"[takes.{take.stem}]", f'file = "{take.name}"']
+        if take.stem in rigs:
+            lines.append(f'rig  = "{take.stem}"')
+        else:
+            lines += [
+                f'rig  = "{take.stem}"'
+                f"  # no rig {take.stem!r} in {rigs_dir}; create it or point at another",
+            ]
+    return "\n".join(lines) + "\n"
+
+
+def scaffold(config_path: Path, rigs_dir: Path, *, ask) -> bool:
+    """Offer to write a stub config. Returns whether one was written.
+
+    `ask` is passed the proposed contents and answers yes or no, so the decision
+    stays with the caller and this stays testable.
+    """
+    config_path = Path(config_path)
+    if config_path.exists():
+        return False
+
+    proposed = stub_toml(config_path.parent, rigs_dir)
+    if not ask(proposed):
+        return False
+
+    config_path.write_text(proposed)
+    return True
 
 
 def merge_chain(rig_chain: list[Spec], overrides: dict[str, Spec]) -> list[Spec]:
