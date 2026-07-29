@@ -135,12 +135,30 @@ def normalize(source, destination, *, rate: int = ASR_RATE) -> Path:
 
 
 def decode_command(source: Path, destination: Path) -> list[str]:
-    """Decode `source` to mono WAV at its own sample rate — no resampling."""
-    return ["ffmpeg", "-y", "-i", str(source), "-ac", "1", "-f", "wav", str(destination)]
+    """Decode `source` to mono 32-bit WAV at its own sample rate.
+
+    32-bit because a prepped take is 24-bit and Python's ``array`` has no
+    three-byte type; s32 is the smallest that holds a 24-bit sample without
+    loss, and ffmpeg converts back down on the way out.
+    """
+    return [
+        "ffmpeg", "-y", "-i", str(source),
+        "-ac", "1", "-c:a", "pcm_s32le", "-f", "wav", str(destination),
+    ]
+
+
+def wav24_command(source: Path, destination: Path) -> list[str]:
+    """Re-encode a spliced WAV down to 24-bit, the depth a take arrives at."""
+    return ["ffmpeg", "-y", "-i", str(source), "-c:a", "pcm_s24le", str(destination)]
+
+
+def to_wav24(source, destination) -> Path:
+    _execute(wav24_command(Path(source), Path(destination)))
+    return Path(destination)
 
 
 def decode_pcm(source) -> tuple[int, array]:
-    """Decode `source` to mono 16-bit PCM; return (sample_rate, samples).
+    """Decode `source` to mono 32-bit PCM; return (sample_rate, samples).
 
     Native rate, not the ASR downsample — this is the audio that gets bleeped
     and written back out, so it keeps the quality it arrived with.
@@ -151,7 +169,9 @@ def decode_pcm(source) -> tuple[int, array]:
         with wave.open(str(decoded), "rb") as w:
             sample_rate = w.getframerate()
             raw = w.readframes(w.getnframes())
-    samples = array("h")
+    samples = array("i")
+    if samples.itemsize != 4:
+        raise RuntimeError(f"expected 4-byte ints, got {samples.itemsize}")
     samples.frombytes(raw)
     return sample_rate, samples
 

@@ -13,7 +13,7 @@ import tempfile
 from pathlib import Path
 
 from . import ffmpeg
-from .bleep import render_file
+from .bleep import DEFAULT_AMPLITUDE, render_file
 from .clean import ROOT, clean_episode
 from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
@@ -121,7 +121,10 @@ def build_parser() -> argparse.ArgumentParser:
     p_bleep.add_argument("manifest")
     p_bleep.add_argument("--out", default="censored.wav")
     p_bleep.add_argument("--freq", type=float, default=1000.0)
-    p_bleep.add_argument("--amplitude", type=int, default=12000)
+    p_bleep.add_argument(
+        "--amplitude", type=int, default=DEFAULT_AMPLITUDE,
+        help="tone amplitude in 32-bit sample units (default: full-scale/2.7)",
+    )
     p_bleep.set_defaults(func=_cmd_bleep)
 
     return parser

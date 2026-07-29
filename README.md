@@ -250,7 +250,6 @@ of that work is still outstanding. As it stands:
   prepped take, and there is no `podio run`.
 - **The tone level is hardcoded** at roughly −8.7 dBFS, which is about 12 dB
   hotter than a −24 LUFS working level. It should derive from the working level.
-- **The splice is 16-bit**, so bleeping a 24-bit prepped take costs bit depth.
 - A phonetic safety net for words the ASR mis-transcribes — the main
   false-negative risk — does not exist.
 - The censored output is mono; a stereo source is downmixed.
