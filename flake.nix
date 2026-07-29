@@ -1,5 +1,5 @@
 {
-  description = "Offline AI-driven profanity bleeping pipeline";
+  description = "podio — clean and censor an episode's takes for the NLE";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -10,25 +10,23 @@
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = import nixpkgs { inherit system; };
-
-        # Lightweight interpreter for the pure core + fast tests.
-        # The heavy ASR stack (WhisperX/torch) is installed on demand into a
-        # uv venv via `just setup-asr`, since it is not cleanly packaged here.
-        python = pkgs.python312.withPackages (ps: with ps; [
-          pytest
-        ]);
       in {
+        # The seam: nix supplies the system binaries uv cannot, uv supplies the
+        # Python stack nix packages badly. No python here on purpose — a second
+        # interpreter is how you end up unsure which one you are running.
+        #
+        # ffmpeg is the one that must be pinned: podio scrapes its
+        # human-readable stderr for loudness and per-window levels, so a
+        # formatting change upstream breaks parsing rather than the build.
         devShells.default = pkgs.mkShell {
           packages = [
-            python
-            pkgs.ffmpeg   # audio decode / normalize
+            pkgs.ffmpeg   # measurement, filtering, decode/mux
             pkgs.just     # task runner
-            pkgs.uv       # installs the ASR extras
+            pkgs.uv       # owns the Python interpreter and every Python dep
           ];
 
           shellHook = ''
-            export PYTHONPATH="$PWD/src:$PYTHONPATH"
-            echo "bleep-pipeline dev shell — run 'just' to see tasks"
+            echo "podio dev shell — run 'just' to see tasks"
           '';
         };
       });

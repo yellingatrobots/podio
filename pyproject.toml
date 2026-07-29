@@ -1,7 +1,29 @@
-# No build-system on purpose: this project is run in place (via PYTHONPATH),
-# not installed as a package. This file only carries pytest config and records
-# the ASR extra for documentation. Runtime deps come from nix (`flake.nix`);
-# the heavy ASR stack is installed via `just setup-asr`.
+[project]
+name = "podio"
+version = "0.1.0"
+description = "Clean and censor an episode's takes into NLE-ready audio"
+requires-python = ">=3.12"
+# whisperx is not optional: censoring is part of the pass, not an add-on.
+# It brings torch with it — about 1.1 GB installed, which is the price of
+# detection running locally and offline once the weights are cached.
+dependencies = [
+    "pydantic>=2",
+    "whisperx",
+]
+
+[project.scripts]
+podio = "podio.cli:main"
+
+[dependency-groups]
+dev = ["pytest"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/podio"]
+
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 testpaths = ["tests"]
