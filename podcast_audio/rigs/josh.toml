@@ -1,0 +1,45 @@
+# Josh — dynamic mic.
+#
+# See rigs/ian.toml for what each stage is and when to switch it on.
+
+[[stage]]
+name = "highpass"
+f = 80
+
+[[stage]]
+name = "afftdn"
+enabled = false
+noise_floor_db = "floor"
+reduction_db = 12
+
+[[stage]]
+name = "rnnoise"
+enabled = false
+model = "lq"
+
+[[stage]]
+name = "gate"
+enabled = false
+threshold_db = "floor+12"
+range_db = -40
+ratio = 6
+attack_ms = 5
+release_ms = 250
+
+[[stage]]
+name = "eq"
+enabled = false
+bands = []
+
+[[stage]]
+name = "compressor"
+threshold_db = -18
+ratio = 3
+attack_ms = 5
+release_ms = 60
+
+[[stage]]
+name = "deesser"
+intensity = 0.4
+frequency = 0.5
+max_reduction = 0.5

@@ -1,0 +1,89 @@
+"""Level arithmetic: unit conversion, auto values, and gain match.
+
+Config speaks dB throughout. ffmpeg does not — agate wants linear amplitude,
+acompressor wants dB — so conversion lives here and stage classes call into it.
+"""
+
+import re
+from dataclasses import dataclass
+
+AUTO_VALUE = re.compile(r"^([a-z_]+)(?:\s*([+-])\s*([\d.]+))?$")
+
+
+@dataclass(frozen=True)
+class Measured:
+    """What analysis learned about one take.
+
+    `floor_db` comes from the pre-chain pass and is what auto values resolve
+    against. The loudness fields come from the post-chain pass and stay None
+    until it has run.
+    """
+
+    floor_db: float
+    integrated_lufs: float | None = None
+    true_peak_db: float | None = None
+
+    def reference(self, name: str) -> float:
+        if name != "floor":
+            raise ValueError(
+                f"unknown reference {name!r} in auto value; only 'floor' is available"
+            )
+        return self.floor_db
+
+
+@dataclass(frozen=True)
+class GainMatch:
+    gain_db: float
+    resulting_peak_db: float
+    clamped: bool
+
+
+def db_to_linear(db: float) -> float:
+    return 10.0 ** (db / 20.0)
+
+
+def resolve_db(value: float | str, measured: Measured) -> float:
+    """Resolve a dB parameter that may be a number or an auto value.
+
+    Auto values are a measurement reference with an optional offset, e.g.
+    "floor+12" — read as "twelve dB above this take's noise floor".
+    """
+    if not isinstance(value, str):
+        return float(value)
+
+    text = value.replace(" ", "")
+    try:
+        return float(text)
+    except ValueError:
+        pass
+
+    match = AUTO_VALUE.match(text)
+    if not match:
+        raise ValueError(
+            f"cannot read {value!r} as a dB value; expected a number or "
+            f"a reference like 'floor+12'"
+        )
+
+    name, sign, offset = match.groups()
+    base = measured.reference(name)
+    if offset is None:
+        return base
+    return base + (float(offset) if sign == "+" else -float(offset))
+
+
+def gain_match(
+    measured: Measured, working_level_db: float, peak_ceiling_db: float
+) -> GainMatch:
+    """Constant gain bringing a take to the working level, clamped at the ceiling."""
+    if measured.integrated_lufs is None or measured.true_peak_db is None:
+        raise ValueError(
+            "loudness has not been measured; gain match needs the post-chain pass"
+        )
+
+    wanted = working_level_db - measured.integrated_lufs
+    peak_if_applied = measured.true_peak_db + wanted
+    if peak_if_applied <= peak_ceiling_db:
+        return GainMatch(gain_db=wanted, resulting_peak_db=peak_if_applied, clamped=False)
+
+    allowed = peak_ceiling_db - measured.true_peak_db
+    return GainMatch(gain_db=allowed, resulting_peak_db=peak_ceiling_db, clamped=True)
