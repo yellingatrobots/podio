@@ -7,12 +7,29 @@ result-*
 __pycache__/
 *.py[cod]
 .venv/
+venv/
 .pytest_cache/
 *.egg-info/
 
-# pipeline outputs
+# audio — takes and renders live outside version control
+*.wav
+*.flac
+*.mp3
+*.m4a
+*.mp4
+*.aif
+*.aiff
+
+# ...except the fixtures the render test runs against
+!test_audio/*.m4a
+
+# outputs
 manifest*.json
 *.transcript.json
-normalized.wav
-*.wav
-*.mp4
+audio.analysis.toml
+
+# rnnoise models
+*.rnnn
+
+# macOS
+.DS_Store
