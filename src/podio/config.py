@@ -11,8 +11,22 @@ from pathlib import Path
 from typing import Any
 
 TAKE_KEYS = {"file", "rig", "limiter"}
+#: Take sub-tables that configure something other than a stage of the chain,
+#: and so must not be matched against the rig's stage names.
+NON_STAGE_TABLES = {"censor"}
 
 Spec = dict[str, Any]
+
+
+@dataclass(frozen=True)
+class Censor:
+    """Whether and how a take gets censored. Overridable per take."""
+
+    enabled: bool = True
+    #: dBFS, or an auto value relative to the working level ("working-3").
+    tone_level_db: str | float = "working-3"
+    #: None means the wordlist shipped with the tool.
+    wordlist: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -21,6 +35,7 @@ class Take:
     source: Path
     chain: list[Spec]
     limiter: bool
+    censor: Censor
 
 
 @dataclass(frozen=True)
@@ -54,8 +69,9 @@ def load_episode(config_path: Path, rigs_dir: Path) -> Episode:
     if not takes_table:
         raise ValueError(f"{config_path} defines no takes")
 
+    censor = _load_censor(episode.get("censor", {}), Censor(), config_path.parent)
     takes = [
-        _load_take(name, table, config_path.parent, rigs_dir)
+        _load_take(name, table, config_path.parent, rigs_dir, censor)
         for name, table in takes_table.items()
     ]
     return Episode(
@@ -65,7 +81,20 @@ def load_episode(config_path: Path, rigs_dir: Path) -> Episode:
     )
 
 
-def _load_take(name: str, table: Spec, episode_dir: Path, rigs_dir: Path) -> Take:
+def _load_censor(table: Spec, inherited: Censor, episode_dir: Path) -> Censor:
+    """Patch `inherited` with a [censor] table. Episode patches the defaults,
+    a take patches the episode."""
+    wordlist = table.get("wordlist")
+    return Censor(
+        enabled=bool(table.get("enabled", inherited.enabled)),
+        tone_level_db=table.get("tone_level_db", inherited.tone_level_db),
+        wordlist=episode_dir / wordlist if wordlist else inherited.wordlist,
+    )
+
+
+def _load_take(
+    name: str, table: Spec, episode_dir: Path, rigs_dir: Path, censor: Censor
+) -> Take:
     for key in table:
         if key not in TAKE_KEYS and not isinstance(table[key], dict):
             raise ValueError(
@@ -75,11 +104,16 @@ def _load_take(name: str, table: Spec, episode_dir: Path, rigs_dir: Path) -> Tak
 
     rig_name = table.get("rig", name)
     rig = _read(rigs_dir / f"{rig_name}.toml", f"rig {rig_name!r}")
-    overrides = {k: v for k, v in table.items() if isinstance(v, dict)}
+    overrides = {
+        k: v
+        for k, v in table.items()
+        if isinstance(v, dict) and k not in NON_STAGE_TABLES
+    }
 
     return Take(
         name=name,
         source=episode_dir / table["file"],
         chain=merge_chain(rig.get("stage", []), overrides),
         limiter=bool(table.get("limiter", False)),
+        censor=_load_censor(table.get("censor", {}), censor, episode_dir),
     )

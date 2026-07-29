@@ -122,3 +122,122 @@ def test_an_episode_with_no_takes_is_an_error(tmp_path):
     config, rigs = write_episode(tmp_path, "working_level_db = -20.0", {"ian": IAN_RIG})
     with pytest.raises(ValueError, match="no takes"):
         load_episode(config, rigs)
+
+
+def test_a_take_is_censored_by_default(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+        """,
+        {"ian": IAN_RIG},
+    )
+    censor = load_episode(config, rigs).takes[0].censor
+
+    assert censor.enabled is True
+    assert censor.tone_level_db == "working-3"
+    assert censor.wordlist is None
+
+
+def test_an_episode_can_switch_censoring_off_for_every_take(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [censor]
+        enabled = false
+
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+        """,
+        {"ian": IAN_RIG},
+    )
+    assert load_episode(config, rigs).takes[0].censor.enabled is False
+
+
+def test_a_take_can_switch_censoring_off_on_its_own(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+
+        [takes.ian.censor]
+        enabled = false
+
+        [takes.josh]
+        file = "josh.wav"
+        rig = "ian"
+        """,
+        {"ian": IAN_RIG},
+    )
+    ian, josh = load_episode(config, rigs).takes
+
+    assert ian.censor.enabled is False
+    assert josh.censor.enabled is True
+
+
+def test_a_take_censor_block_is_not_read_as_a_stage_override(tmp_path):
+    """`censor` is not a stage, so it must not be matched against the rig chain."""
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+
+        [takes.ian.censor]
+        enabled = false
+        """,
+        {"ian": IAN_RIG},
+    )
+    take = load_episode(config, rigs).takes[0]
+
+    assert [s["name"] for s in take.chain] == ["highpass", "afftdn"]
+
+
+def test_a_take_inherits_the_episode_tone_level_and_can_override_it(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [censor]
+        tone_level_db = "working-6"
+
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+
+        [takes.josh]
+        file = "josh.wav"
+        rig = "ian"
+
+        [takes.josh.censor]
+        tone_level_db = -30.0
+        """,
+        {"ian": IAN_RIG},
+    )
+    ian, josh = load_episode(config, rigs).takes
+
+    assert ian.censor.tone_level_db == "working-6"
+    assert josh.censor.tone_level_db == -30.0
+
+
+def test_a_wordlist_override_resolves_against_the_episode_directory(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [censor]
+        wordlist = "extra_words.toml"
+
+        [takes.ian]
+        file = "ian.wav"
+        rig = "ian"
+        """,
+        {"ian": IAN_RIG},
+    )
+    assert load_episode(config, rigs).takes[0].censor.wordlist == (
+        tmp_path / "extra_words.toml"
+    )
