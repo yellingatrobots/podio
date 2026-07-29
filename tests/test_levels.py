@@ -1,6 +1,13 @@
 import pytest
 
-from podio.levels import Measured, db_to_linear, gain_match, resolve_db
+from podio.levels import (
+    Measured,
+    db_to_linear,
+    gain_match,
+    resolve_db,
+    resolve_tone_db,
+    tone_amplitude,
+)
 
 IAN = Measured(floor_db=-51.5)
 
@@ -36,6 +43,32 @@ def test_resolve_tolerates_whitespace():
 def test_resolve_rejects_unknown_reference():
     with pytest.raises(ValueError, match="ceiling"):
         resolve_db("ceiling+12", IAN)
+
+
+def test_a_tone_level_resolves_against_the_working_level():
+    assert resolve_tone_db("working-3", working_level_db=-24.0) == pytest.approx(-27.0)
+    assert resolve_tone_db("working", working_level_db=-24.0) == pytest.approx(-24.0)
+
+
+def test_a_tone_level_can_be_a_fixed_number():
+    assert resolve_tone_db(-30.0, working_level_db=-24.0) == pytest.approx(-30.0)
+
+
+def test_a_tone_level_cannot_reference_the_noise_floor():
+    """The tone is placed against the working level, not against the room."""
+    with pytest.raises(ValueError, match="floor"):
+        resolve_tone_db("floor+12", working_level_db=-24.0)
+
+
+def test_tone_amplitude_is_the_peak_of_a_sine_at_that_rms():
+    # A sine's peak sits 3.01 dB above its RMS, so -27 dBFS RMS peaks at -24.
+    amplitude = tone_amplitude(-27.0, full_scale=2_147_483_647)
+    assert amplitude == pytest.approx(0.0631 * 2_147_483_647, rel=0.01)
+
+
+def test_tone_amplitude_never_exceeds_full_scale():
+    """0 dBFS RMS would peak 3 dB over full scale; it has to clamp, not wrap."""
+    assert tone_amplitude(0.0, full_scale=2_147_483_647) == 2_147_483_647
 
 
 def test_gain_match_raises_a_quiet_take_to_the_working_level():

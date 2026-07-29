@@ -13,9 +13,10 @@ import tempfile
 from pathlib import Path
 
 from . import ffmpeg
-from .bleep import DEFAULT_AMPLITUDE, render_file
+from .bleep import INT32_MAX, render_file
 from .clean import ROOT, clean_episode
 from .detect import transcribe_and_detect
+from .levels import DEFAULT_TONE_LEVEL_DB, tone_amplitude
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
@@ -29,7 +30,8 @@ def _cmd_normalize(args) -> int:
 def _cmd_bleep(args) -> int:
     render_file(
         args.audio, args.manifest, args.out,
-        freq=args.freq, amplitude=args.amplitude,
+        freq=args.freq,
+        amplitude=tone_amplitude(args.tone_level_db, INT32_MAX),
     )
     print(f"wrote {args.out}")
     return 0
@@ -122,8 +124,11 @@ def build_parser() -> argparse.ArgumentParser:
     p_bleep.add_argument("--out", default="censored.wav")
     p_bleep.add_argument("--freq", type=float, default=1000.0)
     p_bleep.add_argument(
-        "--amplitude", type=int, default=DEFAULT_AMPLITUDE,
-        help="tone amplitude in 32-bit sample units (default: full-scale/2.7)",
+        "--tone-level-db", type=float, default=DEFAULT_TONE_LEVEL_DB,
+        help=(
+            "tone level in dBFS RMS (default %(default)s: three dB under a -24 "
+            "working level). podio run takes this from the episode instead."
+        ),
     )
     p_bleep.set_defaults(func=_cmd_bleep)
 

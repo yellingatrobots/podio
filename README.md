@@ -127,6 +127,29 @@ leaving them for review rather than bleeping blindly.
 `--model` is a WhisperX model name — `base.en` by default, `large-v3` for
 accuracy at the cost of speed.
 
+### What gets censored
+
+Censoring is configured in the episode, like everything else that varies per
+recording:
+
+```toml
+[censor]
+enabled       = true          # default; false leaves the episode uncensored
+tone_level_db = "working-3"   # default; or a fixed dBFS number
+wordlist      = "extra.toml"  # optional, relative to the episode directory
+
+[takes.ian.censor]
+enabled = false               # this take only
+```
+
+`tone_level_db` is the tone's **RMS** level and, like every other dB value here,
+may be an auto value — `"working-3"` means three dB under the working level, so
+the bleep tracks the level the takes were brought to. A sine peaks 3 dB above
+its RMS, so at the default `-24` working level the tone peaks at −24 dBFS: well
+clear of the peak ceiling, plainly audible, and not the loudest thing in the
+episode. Equal-RMS with speech reads as *louder* than speech, because the tone
+is continuous, narrowband, and near the ear's most sensitive region.
+
 ### Wordlist
 
 `config/wordlist.toml` holds the terms and an `allowlist` of whole words that
@@ -248,8 +271,6 @@ of that work is still outstanding. As it stands:
 - **Censoring is not yet wired into the clean pass.** `detect` and `bleep` work
   on whatever file you point them at; they don't yet run automatically over a
   prepped take, and there is no `podio run`.
-- **The tone level is hardcoded** at roughly −8.7 dBFS, which is about 12 dB
-  hotter than a −24 LUFS working level. It should derive from the working level.
 - A phonetic safety net for words the ASR mis-transcribes — the main
   false-negative risk — does not exist.
 - The censored output is mono; a stereo source is downmixed.

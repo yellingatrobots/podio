@@ -15,11 +15,11 @@ from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
 
 from . import ffmpeg
+from .levels import DEFAULT_TONE_LEVEL_DB, tone_amplitude
 
 INT32_MIN, INT32_MAX = -2_147_483_648, 2_147_483_647
-#: The tone level the 16-bit renderer used, carried over unchanged so this
-#: change is only about depth. Superseded by the take's tone_level_db.
-DEFAULT_AMPLITUDE = round(12000 / 32767 * INT32_MAX)
+#: Callers that know the working level pass their own; this is the fallback.
+DEFAULT_AMPLITUDE = tone_amplitude(DEFAULT_TONE_LEVEL_DB, INT32_MAX)
 
 
 def bleep_pcm(
