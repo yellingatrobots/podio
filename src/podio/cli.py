@@ -62,7 +62,7 @@ def _cmd_manifest(args) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="bleep", description=__doc__)
+    parser = argparse.ArgumentParser(prog="podio", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_norm = sub.add_parser("normalize", help="decode audio to 16kHz mono wav")

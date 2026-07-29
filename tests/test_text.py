@@ -1,4 +1,4 @@
-from bleep.text import normalize
+from podio.text import normalize
 
 
 def test_lowercases():

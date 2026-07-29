@@ -1,5 +1,5 @@
-from bleep.model import Word
-from bleep.wordlist import WordList, find_spans
+from podio.model import Word
+from podio.wordlist import WordList, find_spans
 
 WL = WordList.from_dict(
     {

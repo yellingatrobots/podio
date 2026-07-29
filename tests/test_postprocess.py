@@ -1,5 +1,5 @@
-from bleep.model import CensorSpan
-from bleep.postprocess import postprocess_spans
+from podio.model import CensorSpan
+from podio.postprocess import postprocess_spans
 
 
 def span(start, end, term="fuck"):
