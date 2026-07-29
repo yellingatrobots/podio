@@ -1,8 +1,9 @@
-# Podcast Audio
+# Podio
 
-The vocabulary for the audio cleanup pass that sits between raw per-speaker
-recordings and the NLE timeline for a *Yelling at Robots* episode. This context
-covers only the cleanup pass; final loudness and the mixdown belong to the NLE.
+The vocabulary for the audio pass that sits between raw per-speaker recordings
+and the NLE timeline for a *Yelling at Robots* episode. The pass cleans each
+take and censors it. Syncing, mixing and final distribution loudness belong to
+the NLE.
 
 ## Language
 
@@ -28,22 +29,30 @@ the rig — room tone, a fan, a hotel room on the road. Measured per take, never
 assumed.
 _Avoid_: environment, noise, room
 
-**Clean Track**:
-The audio-only output of the cleanup pass for one take: denoised, leveled, and
-gain-matched, ready to be placed on the NLE timeline.
-_Avoid_: processed file, podcast file, output
+**Prepped Take**:
+The audio output of the chain for one take: denoised, leveled, and gain-matched,
+but not yet censored. An intermediate — it exists so a censored take can be
+re-rendered without re-running the chain.
+_Avoid_: clean track, processed file, mixed, output
+
+**Censored Take**:
+A prepped take with every span in its manifest replaced by the tone. The
+deliverable — the file that goes to the NLE timeline.
+_Avoid_: final, master, bleeped file
 
 **Stage**:
-One named, individually toggleable step in the cleanup pass, carrying its own
-parameters. Every stage can be switched off without disturbing the others.
-_Avoid_: step, filter, effect
+One named step in the pass, carrying its own parameters. Most transform audio
+and can be switched off without disturbing the others. Those that write or read
+a manifest cannot: switching off the stage that writes one leaves whatever reads
+it with nothing — or, worse, with a stale one left over from a previous run.
+_Avoid_: step, filter, effect, phase
 
 **Chain**:
 The ordered sequence of enabled stages applied to a take.
 _Avoid_: pipeline, graph, filter string
 
 **Working Level**:
-The integrated loudness every clean track is brought to. Deliberately not a
+The integrated loudness every prepped take is brought to. Deliberately not a
 distribution loudness — it exists so takes sit at a common level with headroom
 for the NLE to mix and finalise.
 _Avoid_: target loudness, LUFS target, normalization target
@@ -55,8 +64,8 @@ never dynamics.
 _Avoid_: normalize, level, loudnorm
 
 **Peak Ceiling**:
-The true-peak limit a clean track may not exceed. When gain match would breach
-it, the tool reduces the gain and says so rather than clipping silently.
+The true-peak limit a take may not exceed. When gain match would breach it, the
+tool reduces the gain and says so rather than clipping silently.
 _Avoid_: headroom, limit, max peak
 
 **Noise Floor**:
@@ -66,10 +75,40 @@ take — an edit or a dropout is silence, not room tone.
 _Avoid_: silence, background, noise level
 
 **Auto Value**:
-A stage parameter expressed relative to something measured about the take
-(`"floor+12"`) rather than as a fixed number. How a chain adapts to conditions
-without being re-tuned by hand.
+A stage parameter expressed relative to something measured or configured
+(`"floor+12"`, `"working-3"`) rather than as a fixed number. How a chain adapts
+to conditions without being re-tuned by hand.
 _Avoid_: dynamic, adaptive, computed
+
+**Wordlist**:
+The configurable set of terms to censor, with an allowlist of whole words that
+must never be censored whatever else matches. Matching is whole-word or
+whole-phrase and case- and punctuation-insensitive, never substrings.
+_Avoid_: blocklist, dictionary, banned words, filter
+
+**Span**:
+One region of a take to be censored — a start and an end, with the term that
+matched, the surrounding text, and the confidence it was heard with. Timed
+against the take, so it survives being reviewed and edited by hand.
+_Avoid_: region, segment, cut, mute, hit
+
+**Manifest**:
+The spans for one take, as a file. An edit list, not audio — it can be read,
+edited, and re-rendered without re-running detection. It persists between runs,
+which is what makes hand-editing possible and staleness possible with it.
+_Avoid_: EDL, censor list, cuts, spans file
+
+**Transcript**:
+Every word detection heard in a take, with its timing and confidence. The
+auditable record of why the manifest says what it says, and the place to look
+when a word was missed.
+_Avoid_: captions, subtitles, ASR output
+
+**Tone Level**:
+The level of the tone that replaces a span, expressed relative to the working
+level so it tracks it. A censored passage is meant to be unmistakable, not the
+loudest thing in the episode.
+_Avoid_: bleep volume, amplitude, tone gain
 
 **Analysis Sidecar**:
 The per-episode record of what a run measured and what every auto value resolved
