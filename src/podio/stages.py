@@ -11,7 +11,7 @@ from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
-from levels import Measured, db_to_linear, resolve_db
+from .levels import Measured, db_to_linear, resolve_db
 
 DbParam = float | str
 

@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-import ffmpeg
-from run import main
+from podio import ffmpeg
+from podio.clean import main
 
 pytestmark = pytest.mark.skipif(
     shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH"

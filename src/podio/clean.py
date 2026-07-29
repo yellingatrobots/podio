@@ -1,13 +1,7 @@
-#!/usr/bin/env -S uv run --script
-# /// script
-# requires-python = ">=3.12"
-# dependencies = ["pydantic>=2"]
-# ///
-"""Clean the raw per-speaker takes of an episode into NLE-ready WAVs.
+"""Clean the raw per-speaker takes of an episode into prepped takes.
 
-    uv run run.py                     both takes, full length
-    uv run run.py --range 21:30+45    just the bit you want to hear
-    uv run run.py --dry-run           measure and report, render nothing
+Measures each take, resolves its chain, renders it, and brings it to the
+working level by a single gain. Censoring is a separate stage.
 """
 
 import argparse
@@ -19,12 +13,14 @@ from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
-import config as config_module
-import ffmpeg
-from levels import GainMatch, Measured, gain_match
-from stages import build_chain
+from . import config as config_module
+from . import ffmpeg
+from .levels import GainMatch, Measured, gain_match
+from .stages import build_chain
 
-TOOL_DIR = Path(__file__).parent
+#: Repo root, from src/podio/clean.py. Where the tool-level defaults live
+#: (rigs, wordlist) — this tool is run in place, not installed.
+ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -122,7 +118,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "takes", nargs="*", help="only process these takes (default: all)"
     )
     parser.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
-    parser.add_argument("--rigs", type=Path, default=TOOL_DIR / "rigs")
+    parser.add_argument("--rigs", type=Path, default=ROOT / "rigs")
     parser.add_argument(
         "--range",
         dest="audition",

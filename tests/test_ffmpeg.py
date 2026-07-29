@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from ffmpeg import (
+from podio.ffmpeg import (
     analyse_command,
     apply_gain_command,
     parse_loudness,

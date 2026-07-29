@@ -2,8 +2,8 @@ from pathlib import Path
 
 import pytest
 
-from levels import Measured
-from stages import build_chain, build_stage
+from podio.levels import Measured
+from podio.stages import build_chain, build_stage
 
 MODELS = Path("/models")
 IAN = Measured(floor_db=-51.5)

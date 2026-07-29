@@ -1,6 +1,6 @@
 import pytest
 
-from config import load_episode, merge_chain
+from podio.config import load_episode, merge_chain
 
 RIG_CHAIN = [
     {"name": "highpass", "f": 80},

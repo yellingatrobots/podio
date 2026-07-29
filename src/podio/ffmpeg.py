@@ -8,7 +8,7 @@ import re
 import subprocess
 from pathlib import Path
 
-from levels import db_to_linear
+from .levels import db_to_linear
 
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
