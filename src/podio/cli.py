@@ -73,7 +73,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_man = sub.add_parser("manifest", help="detect profanity -> censor manifest JSON")
     p_man.add_argument("audio")
     p_man.add_argument("--out", default="manifest.json")
-    p_man.add_argument("--wordlist", default="config/wordlist.yaml")
+    p_man.add_argument("--wordlist", default="config/wordlist.toml")
     p_man.add_argument(
         "--inset", type=float, default=0.03,
         help="seconds to shrink each span edge inward (default 0.03)",

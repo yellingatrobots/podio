@@ -1,0 +1,21 @@
+# The wordlist: terms to censor, and the words that must never be censored.
+#
+# Matching is whole-word (or whole-phrase), case- and punctuation-insensitive.
+# A term containing spaces is matched as a phrase; longer phrases win over
+# shorter overlapping ones.
+#
+# allowlist: whole words that must NEVER be censored, even if a term would
+# match — the guard against the Scunthorpe problem for edge cases you find.
+
+allowlist = ["class", "assassin", "cockpit", "shiitake"]
+
+terms = [
+  "fuck",
+  "fucking",
+  "fucker",
+  "motherfucker",
+  "shit",
+  "cunt",
+  "cocksucker",
+  "asshole",
+]

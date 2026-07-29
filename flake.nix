@@ -15,7 +15,6 @@
         # The heavy ASR stack (WhisperX/torch) is installed on demand into a
         # uv venv via `just setup-asr`, since it is not cleanly packaged here.
         python = pkgs.python312.withPackages (ps: with ps; [
-          pyyaml
           pytest
         ]);
       in {

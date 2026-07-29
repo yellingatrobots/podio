@@ -1,14 +1,12 @@
+from pathlib import Path
+
 from podio.manifest import Word
 from podio.wordlist import WordList, find_spans
 
 WL = WordList.from_dict(
     {
         "allowlist": ["class", "assassin"],
-        "terms": [
-            {"term": "fuck"},
-            {"term": "damn"},
-            {"term": "son of a bitch"},
-        ],
+        "terms": ["fuck", "damn", "son of a bitch"],
     }
 )
 
@@ -50,7 +48,7 @@ def test_detects_multiword_phrase():
 
 def test_allowlist_blocks_a_listed_term():
     wl = WordList.from_dict(
-        {"allowlist": ["damn"], "terms": [{"term": "damn"}]}
+        {"allowlist": ["damn"], "terms": ["damn"]}
     )
     assert find_spans(words("oh", "damn"), wl) == []
 
@@ -60,3 +58,12 @@ def test_confidence_is_the_minimum_across_matched_words():
           Word("a", 3.0, 3.5, 0.8), Word("bitch", 4.0, 4.5, 0.7)]
     spans = find_spans(ws, WL)
     assert spans[0].confidence == 0.4
+
+
+def test_the_shipped_wordlist_loads_and_respects_its_allowlist():
+    wordlist = WordList.from_file(
+        Path(__file__).resolve().parents[1] / "config" / "wordlist.toml"
+    )
+
+    assert [s.term for s in find_spans(words("oh", "shit"), wordlist)] == ["shit"]
+    assert find_spans(words("the", "class", "cockpit"), wordlist) == []

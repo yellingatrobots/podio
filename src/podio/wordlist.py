@@ -7,11 +7,10 @@ provides explicit exceptions.
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass
 from pathlib import Path
 from typing import List, Optional, Sequence, Tuple
-
-import yaml
 
 from .manifest import CensorSpan, Word
 from .text import normalize
@@ -39,8 +38,7 @@ class WordList:
         allowlist = {normalize(w) for w in data.get("allowlist", [])}
         exact: dict = {}
         phrases: List[Entry] = []
-        for raw in data.get("terms", []):
-            term = raw["term"]
+        for term in data.get("terms", []):
             tokens = tuple(normalize(t) for t in term.split())
             entry = Entry(term=term, tokens=tokens)
             if len(tokens) > 1:
@@ -51,8 +49,8 @@ class WordList:
 
     @classmethod
     def from_file(cls, path) -> "WordList":
-        data = yaml.safe_load(Path(path).read_text()) or {}
-        return cls.from_dict(data)
+        with Path(path).open("rb") as f:
+            return cls.from_dict(tomllib.load(f))
 
     def match_at(self, norms: Sequence[str], i: int) -> Tuple[Optional[Entry], int]:
         """Return (entry, length) for the longest match starting at index i.

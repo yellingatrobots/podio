@@ -13,7 +13,7 @@ test:
 # Only needed to run real transcription; tests do not require it.
 setup-asr:
     uv venv .venv
-    uv pip install --python .venv whisperx pyyaml
+    uv pip install --python .venv whisperx
 
 # Debug helper: normalize an audio file to 16kHz mono wav
 normalize audio out="normalized.wav":
@@ -23,7 +23,7 @@ normalize audio out="normalized.wav":
 # Requires `just setup-asr` first (uses the venv for the ML deps).
 # `model` defaults to base.en (fast); pass model=large-v3 for higher accuracy.
 # `min_confidence` drops shaky detections (e.g. min_confidence=0.5); default keeps all.
-manifest audio out="manifest.json" model="base.en" min_confidence="0" wordlist="config/wordlist.yaml":
+manifest audio out="manifest.json" model="base.en" min_confidence="0" wordlist="config/wordlist.toml":
     PYTHONPATH=src .venv/bin/python -m podio.cli manifest "{{audio}}" --out "{{out}}" --wordlist "{{wordlist}}" --model {{model}} --min-confidence {{min_confidence}}
 
 # Render a censored copy from a manifest (1 kHz bleep tone). No ASR deps needed.
