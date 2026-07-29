@@ -110,30 +110,39 @@ def report(message: str):
     print(message, file=sys.stderr)
 
 
-def clean_episode(args) -> int:
-    """Clean every requested take of an episode. Arguments come from the CLI."""
+def clean_all(args) -> tuple[config_module.Episode, list[Result]]:
+    """Clean every requested take and record what was measured.
+
+    Raises ValueError or RuntimeError; the command wrappers turn those into an
+    exit code and a message.
+    """
     if not shutil.which("ffmpeg"):
-        report("ffmpeg is not on PATH")
-        return 1
+        raise RuntimeError("ffmpeg is not on PATH")
 
-    try:
-        episode = config_module.load_episode(args.config, args.rigs)
-        audition = ffmpeg.parse_range(args.audition) if args.audition else None
-        takes = [t for t in episode.takes if not args.takes or t.name in args.takes]
-        if not takes:
-            raise ValueError(f"no take named {', '.join(args.takes)} in {args.config}")
+    episode = config_module.load_episode(args.config, args.rigs)
+    audition = ffmpeg.parse_range(args.audition) if args.audition else None
+    takes = [t for t in episode.takes if not args.takes or t.name in args.takes]
+    if not takes:
+        raise ValueError(f"no take named {', '.join(args.takes)} in {args.config}")
 
-        with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
-            results = [
-                process(t, episode, args.models, audition, Path(tmp), args.dry_run)
-                for t in takes
-            ]
-    except (ValueError, RuntimeError) as error:
-        report(f"error: {error}")
-        return 1
+    with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
+        results = [
+            process(t, episode, args.models, audition, Path(tmp), args.dry_run)
+            for t in takes
+        ]
 
     if not args.dry_run:
         sidecar = args.config.parent / "audio.analysis.toml"
         write_sidecar(sidecar, episode, results)
         report(f"       wrote {sidecar.name}")
+    return episode, results
+
+
+def clean_episode(args) -> int:
+    """Clean every requested take of an episode. Arguments come from the CLI."""
+    try:
+        clean_all(args)
+    except (ValueError, RuntimeError) as error:
+        report(f"error: {error}")
+        return 1
     return 0

@@ -91,10 +91,48 @@ podio clean --dry-run         # measure and resolve, render nothing
 finished render. Use it to check one moment — a laugh you think got chewed —
 without re-rendering 35 minutes.
 
-## Censoring
+## The whole pass
 
-Detection and rendering are separate, so the manifest can be reviewed before
-anything is spliced.
+`podio run` does everything: cleans each take, detects against the *prepped*
+take, and splices the tone on last.
+
+```sh
+podio run                 # clean + censor every take
+podio run ian             # just one take
+podio run --review        # stop after detection, before anything is spliced
+podio run --redetect      # re-detect even over hand-edited manifests
+```
+
+An episode directory afterwards:
+
+```
+ian.wav                raw take
+ian_prepped.wav        cleaned, gain-matched, uncensored
+ian_censored.wav       ← import this one
+ian.manifest.json      the spans, reviewable and editable
+ian.transcript.json    every word heard, with timings
+audio.analysis.toml    what the run measured
+```
+
+Detection listens to the prepped take, not the raw one — denoising and gating
+measurably help the ASR — and the tone goes on after gain match, so it never
+passes through the compressor or the gate, which would pump a constant sine.
+
+**Editing a manifest.** Edit `ian.manifest.json` and re-render it in about a
+second with `podio bleep ian_prepped.wav ian.manifest.json --out
+ian_censored.wav` — no ASR, no chain. A later `podio run` will *stop* rather than
+overwrite an edited manifest, because detection is reproducible and your
+judgement about a word it got wrong is not. `--redetect` overrides that and
+discards the edits. (Detection writes the manifest and transcript together;
+a manifest newer than its transcript is one a human touched.)
+
+`--range` auditions the chain only and censors nothing: a slice's manifest would
+be timed against the slice rather than the take.
+
+## Censoring on its own
+
+The two halves are separate commands too, for a file that isn't part of an
+episode:
 
 ```sh
 podio detect ian.wav --out ian.manifest.json    # -> manifest + transcript
@@ -264,12 +302,6 @@ crest factor after cleanup, and −20 clamped both.
 
 ## Not yet built
 
-The repositories behind this tool were merged recently and the behavioural half
-of that work is still outstanding. As it stands:
-
-- **Censoring is not yet wired into the clean pass.** `detect` and `bleep` work
-  on whatever file you point them at; they don't yet run automatically over a
-  prepped take, and there is no `podio run`.
 - A phonetic safety net for words the ASR mis-transcribes — the main
   false-negative risk — does not exist.
 - The censored output is mono; a stereo source is downmixed.

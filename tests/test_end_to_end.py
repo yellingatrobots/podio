@@ -114,3 +114,40 @@ def test_a_dry_run_measures_but_writes_nothing(episode):
     assert run_on(episode, "--dry-run") == 0
     assert not (episode / "alex_prepped.wav").exists()
     assert not (episode / "audio.analysis.toml").exists()
+
+
+def full_pass(episode: Path, *extra: str) -> int:
+    return main(
+        ["run", "-c", str(episode / "audio.toml"), "--rigs", str(episode / "rigs"), *extra]
+    )
+
+
+def test_a_run_with_censoring_off_stops_after_the_prepped_take(episode):
+    (episode / "audio.toml").write_text(EPISODE + "\n[censor]\nenabled = false\n")
+
+    assert full_pass(episode) == 0
+    assert (episode / "alex_prepped.wav").exists()
+    assert not (episode / "alex_censored.wav").exists()
+    assert not (episode / "alex.manifest.json").exists()
+
+
+def test_an_audition_is_never_censored(episode):
+    """A slice's manifest would be timed against the slice, not the take."""
+    assert full_pass(episode, "--range", "0+2") == 0
+    assert (episode / "alex_audition.wav").exists()
+    assert not (episode / "alex.manifest.json").exists()
+
+
+def test_a_run_refuses_to_discard_a_hand_edited_manifest(episode):
+    edited = '{"spans": [{"start": 1.0, "end": 1.2}]}'
+    (episode / "alex.manifest.json").write_text(edited)
+
+    assert full_pass(episode) == 1
+    assert (episode / "alex.manifest.json").read_text() == edited
+    assert not (episode / "alex_censored.wav").exists()
+
+
+def test_a_dry_run_censors_nothing(episode):
+    assert full_pass(episode, "--dry-run") == 0
+    assert not (episode / "alex_prepped.wav").exists()
+    assert not (episode / "alex.manifest.json").exists()
