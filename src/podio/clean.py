@@ -4,8 +4,6 @@ Measures each take, resolves its chain, renders it, and brings it to the
 working level by a single gain. Censoring is a separate stage.
 """
 
-import argparse
-import os
 import shutil
 import sys
 import tempfile
@@ -82,7 +80,7 @@ def process(
 
 def write_sidecar(path: Path, episode: config_module.Episode, results: list[Result]):
     lines = [
-        f"# written by podcast_audio at {datetime.now(timezone.utc).isoformat()}",
+        f"# written by podio at {datetime.now(timezone.utc).isoformat()}",
         "# a record of one run; never read back as input",
         f"working_level_db = {episode.working_level_db}",
         f"peak_ceiling_db = {episode.peak_ceiling_db}",
@@ -112,34 +110,8 @@ def report(message: str):
     print(message, file=sys.stderr)
 
 
-def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument(
-        "takes", nargs="*", help="only process these takes (default: all)"
-    )
-    parser.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
-    parser.add_argument("--rigs", type=Path, default=ROOT / "rigs")
-    parser.add_argument(
-        "--range",
-        dest="audition",
-        help="render only this slice, as START+SECONDS (e.g. 21:30+45)",
-    )
-    parser.add_argument(
-        "--models",
-        type=Path,
-        default=Path(os.environ.get("RNNOISE_MODELS", "")),
-        help="directory of .rnnn files (default: $RNNOISE_MODELS)",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="measure and print the resolved chain, but render nothing",
-    )
-    return parser.parse_args(argv)
-
-
-def main(argv: list[str] | None = None) -> int:
-    args = parse_args(argv)
+def clean_episode(args) -> int:
+    """Clean every requested take of an episode. Arguments come from the CLI."""
     if not shutil.which("ffmpeg"):
         report("ffmpeg is not on PATH")
         return 1
@@ -151,7 +123,7 @@ def main(argv: list[str] | None = None) -> int:
         if not takes:
             raise ValueError(f"no take named {', '.join(args.takes)} in {args.config}")
 
-        with tempfile.TemporaryDirectory(prefix="podcast_audio_") as tmp:
+        with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
             results = [
                 process(t, episode, args.models, audition, Path(tmp), args.dry_run)
                 for t in takes
@@ -165,7 +137,3 @@ def main(argv: list[str] | None = None) -> int:
         write_sidecar(sidecar, episode, results)
         report(f"       wrote {sidecar.name}")
     return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())

@@ -1,19 +1,21 @@
-"""Command-line entry point.
+"""Command-line entry point — the only place arguments are parsed.
 
-Owns the two things the pure pipeline should not: ffmpeg normalization (with a
-temp file) and constructing the real WhisperX transcriber.
+Owns what the stages should not: ffmpeg normalization (with a temp file) and
+constructing the real WhisperX transcriber.
 """
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 import tempfile
 from pathlib import Path
 
 from . import ffmpeg
-from .detect import transcribe_and_detect
 from .bleep import render_file
+from .clean import ROOT, clean_episode
+from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
@@ -33,7 +35,7 @@ def _cmd_bleep(args) -> int:
     return 0
 
 
-def _cmd_manifest(args) -> int:
+def _cmd_detect(args) -> int:
     wordlist = WordList.from_file(args.wordlist)
     transcriber = WhisperXTranscriber(
         model_size=args.model, device=args.device, language=args.language
@@ -65,12 +67,36 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="podio", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
 
+    p_clean = sub.add_parser("clean", help="clean an episode's takes -> prepped takes")
+    p_clean.add_argument(
+        "takes", nargs="*", help="only process these takes (default: all)"
+    )
+    p_clean.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
+    p_clean.add_argument("--rigs", type=Path, default=ROOT / "rigs")
+    p_clean.add_argument(
+        "--range",
+        dest="audition",
+        help="render only this slice, as START+SECONDS (e.g. 21:30+45)",
+    )
+    p_clean.add_argument(
+        "--models",
+        type=Path,
+        default=Path(os.environ.get("RNNOISE_MODELS", "")),
+        help="directory of .rnnn files (default: $RNNOISE_MODELS)",
+    )
+    p_clean.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="measure and print the resolved chain, but render nothing",
+    )
+    p_clean.set_defaults(func=clean_episode)
+
     p_norm = sub.add_parser("normalize", help="decode audio to 16kHz mono wav")
     p_norm.add_argument("audio")
     p_norm.add_argument("--out", default="normalized.wav")
     p_norm.set_defaults(func=_cmd_normalize)
 
-    p_man = sub.add_parser("manifest", help="detect profanity -> censor manifest JSON")
+    p_man = sub.add_parser("detect", help="detect profanity -> censor manifest JSON")
     p_man.add_argument("audio")
     p_man.add_argument("--out", default="manifest.json")
     p_man.add_argument("--wordlist", default="config/wordlist.toml")
@@ -88,7 +114,7 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_man.add_argument("--device", default="cpu")
     p_man.add_argument("--language", default="en")
-    p_man.set_defaults(func=_cmd_manifest)
+    p_man.set_defaults(func=_cmd_detect)
 
     p_bleep = sub.add_parser("bleep", help="render censored audio from a manifest")
     p_bleep.add_argument("audio")

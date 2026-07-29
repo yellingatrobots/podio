@@ -8,7 +8,7 @@ from pathlib import Path
 import pytest
 
 from podio import ffmpeg
-from podio.clean import main
+from podio.cli import main
 
 pytestmark = pytest.mark.skipif(
     shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH"
@@ -69,7 +69,7 @@ def episode(tmp_path):
 
 def run_on(episode: Path, *extra: str) -> int:
     return main(
-        ["-c", str(episode / "audio.toml"), "--rigs", str(episode / "rigs"), *extra]
+        ["clean", "-c", str(episode / "audio.toml"), "--rigs", str(episode / "rigs"), *extra]
     )
 
 

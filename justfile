@@ -24,7 +24,7 @@ normalize audio out="normalized.wav":
 # `model` defaults to base.en (fast); pass model=large-v3 for higher accuracy.
 # `min_confidence` drops shaky detections (e.g. min_confidence=0.5); default keeps all.
 manifest audio out="manifest.json" model="base.en" min_confidence="0" wordlist="config/wordlist.toml":
-    PYTHONPATH=src .venv/bin/python -m podio.cli manifest "{{audio}}" --out "{{out}}" --wordlist "{{wordlist}}" --model {{model}} --min-confidence {{min_confidence}}
+    PYTHONPATH=src .venv/bin/python -m podio.cli detect "{{audio}}" --out "{{out}}" --wordlist "{{wordlist}}" --model {{model}} --min-confidence {{min_confidence}}
 
 # Render a censored copy from a manifest (1 kHz bleep tone). No ASR deps needed.
 # Output format follows `out`'s extension: .wav writes audio directly; .mp4/.m4a
@@ -38,6 +38,6 @@ censor audio out="censored.wav" model="base.en":
     #!/usr/bin/env bash
     set -euo pipefail
     tmp="$(mktemp -d)"
-    PYTHONPATH=src .venv/bin/python -m podio.cli manifest "{{audio}}" --out "$tmp/manifest.json" --model {{model}}
+    PYTHONPATH=src .venv/bin/python -m podio.cli detect "{{audio}}" --out "$tmp/manifest.json" --model {{model}}
     python -m podio.cli bleep "{{audio}}" "$tmp/manifest.json" --out "{{out}}"
     echo "wrote {{out}}  (play it: afplay {{out}})"
