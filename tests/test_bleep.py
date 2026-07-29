@@ -1,10 +1,11 @@
 import math
 
-from podio.bleep import _encode_command, bleep_pcm
+from podio.bleep import bleep_pcm
+from podio.ffmpeg import mux_command
 
 
-def test_encode_command_muxes_censored_audio_over_source_video():
-    cmd = _encode_command("in.mp4", "/tmp/censored.wav", "out.mp4")
+def test_mux_command_muxes_censored_audio_over_source_video():
+    cmd = mux_command("in.mp4", "/tmp/censored.wav", "out.mp4")
 
     assert cmd == [
         "ffmpeg", "-y",

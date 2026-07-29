@@ -11,7 +11,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .audio import normalize_audio
+from . import ffmpeg
 from .detect import transcribe_and_detect
 from .bleep import render_file
 from .transcribe import WhisperXTranscriber
@@ -19,7 +19,7 @@ from .wordlist import WordList
 
 
 def _cmd_normalize(args) -> int:
-    normalize_audio(args.audio, args.out)
+    ffmpeg.normalize(args.audio, args.out)
     print(f"wrote {args.out}")
     return 0
 
@@ -41,7 +41,7 @@ def _cmd_manifest(args) -> int:
 
     with tempfile.TemporaryDirectory() as tmp:
         normalized = str(Path(tmp) / "normalized.wav")
-        normalize_audio(args.audio, normalized)
+        ffmpeg.normalize(args.audio, normalized)
         transcript, manifest = transcribe_and_detect(
             normalized, transcriber, wordlist,
             inset=args.inset, min_confidence=args.min_confidence,

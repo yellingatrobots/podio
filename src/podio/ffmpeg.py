@@ -6,6 +6,9 @@ while passing audio through, so the chain runs once rather than twice.
 
 import re
 import subprocess
+import tempfile
+import wave
+from array import array
 from pathlib import Path
 
 from .levels import db_to_linear
@@ -14,6 +17,8 @@ WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
 WINDOW_SECONDS = 1
 WORKING_RATE = 48000
+#: WhisperX expects 16 kHz mono. Only the ASR input is downsampled.
+ASR_RATE = 16_000
 #: Where in the sorted per-window levels the noise floor is taken from. Low
 #: enough to sit among the windows where nobody is talking, high enough not to
 #: land on the handful that are digitally silent.
@@ -112,6 +117,62 @@ def apply_gain_command(
     if limiter:
         chain += f",alimiter=limit={db_to_linear(ceiling_db):.5f}:level=false"
     return _base(source, None) + ["-af", chain, "-c:a", "pcm_s24le", str(destination)]
+
+
+def normalize_command(source: Path, destination: Path, rate: int) -> list[str]:
+    """Decode `source` to mono PCM WAV at `rate` Hz — what the ASR model wants."""
+    return [
+        "ffmpeg", "-y", "-i", str(source),
+        "-ac", "1", "-ar", str(rate),
+        "-f", "wav", str(destination),
+    ]
+
+
+def normalize(source, destination, *, rate: int = ASR_RATE) -> Path:
+    """Decode `source` for the ASR model. The take itself is left untouched."""
+    _execute(normalize_command(Path(source), Path(destination), rate))
+    return Path(destination)
+
+
+def decode_command(source: Path, destination: Path) -> list[str]:
+    """Decode `source` to mono WAV at its own sample rate — no resampling."""
+    return ["ffmpeg", "-y", "-i", str(source), "-ac", "1", "-f", "wav", str(destination)]
+
+
+def decode_pcm(source) -> tuple[int, array]:
+    """Decode `source` to mono 16-bit PCM; return (sample_rate, samples).
+
+    Native rate, not the ASR downsample — this is the audio that gets bleeped
+    and written back out, so it keeps the quality it arrived with.
+    """
+    with tempfile.TemporaryDirectory() as tmp:
+        decoded = Path(tmp) / "decoded.wav"
+        _execute(decode_command(Path(source), decoded))
+        with wave.open(str(decoded), "rb") as w:
+            sample_rate = w.getframerate()
+            raw = w.readframes(w.getnframes())
+    samples = array("h")
+    samples.frombytes(raw)
+    return sample_rate, samples
+
+
+def mux_command(source: Path, audio: Path, destination: Path) -> list[str]:
+    """ffmpeg args to put `audio` over `source`'s video into `destination`."""
+    return [
+        "ffmpeg", "-y",
+        "-i", str(source),
+        "-i", str(audio),
+        "-map", "0:v?", "-map", "1:a",
+        "-c:v", "copy", "-c:a", "aac",
+        "-shortest",
+        str(destination),
+    ]
+
+
+def mux(source, audio, destination) -> Path:
+    """Replace `source`'s audio track with `audio`, copying any video through."""
+    _execute(mux_command(Path(source), Path(audio), Path(destination)))
+    return Path(destination)
 
 
 def _execute(command: list[str]) -> subprocess.CompletedProcess:

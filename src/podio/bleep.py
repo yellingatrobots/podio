@@ -1,20 +1,20 @@
 """Splice the tone over every span in a manifest.
 
-Splices a 1 kHz tone over each censor span. The sample-level work is a pure
-function over mono PCM (unit-tested); the file I/O wrapper (ffmpeg decode +
-WAV write) lives alongside it and is verified by a real render.
+The sample-level work is a pure function over mono PCM (unit-tested). Decoding
+and muxing belong to `ffmpeg`; this module deals in samples and WAV files.
 """
 
 from __future__ import annotations
 
 import json
 import math
-import subprocess
 import tempfile
 import wave
 from array import array
 from pathlib import Path
 from typing import Iterable, List, Sequence, Tuple
+
+from . import ffmpeg
 
 INT16_MIN, INT16_MAX = -32768, 32767
 
@@ -62,13 +62,17 @@ def render_file(
     is copied through untouched and only the audio is replaced.
     """
     spans = _load_spans(manifest_path)
-    sample_rate, samples = _decode_pcm(audio_src)
+    sample_rate, samples = ffmpeg.decode_pcm(audio_src)
     out = bleep_pcm(samples, sample_rate, spans, freq=freq, amplitude=amplitude)
 
     out_path = Path(out_path)
     if out_path.suffix.lower() == ".wav":
-        return _write_wav(out_path, sample_rate, out)
-    return _mux_over_source(audio_src, out_path, sample_rate, out)
+        return write_wav(out_path, sample_rate, out)
+
+    with tempfile.TemporaryDirectory() as tmp:
+        censored = Path(tmp) / "censored.wav"
+        write_wav(censored, sample_rate, out)
+        return ffmpeg.mux(audio_src, censored, out_path)
 
 
 def _load_spans(manifest_path) -> List[Tuple[float, float]]:
@@ -76,59 +80,7 @@ def _load_spans(manifest_path) -> List[Tuple[float, float]]:
     return [(s["start"], s["end"]) for s in data.get("spans", [])]
 
 
-def _decode_pcm(src) -> Tuple[int, array]:
-    """Decode `src` to mono 16-bit PCM via ffmpeg; return (sample_rate, samples)."""
-    with tempfile.TemporaryDirectory() as tmp:
-        decoded = str(Path(tmp) / "decoded.wav")
-        _run_ffmpeg(
-            ["ffmpeg", "-y", "-i", str(src), "-ac", "1", "-f", "wav", decoded],
-            src,
-        )
-        with wave.open(decoded, "rb") as w:
-            sample_rate = w.getframerate()
-            raw = w.readframes(w.getnframes())
-    samples = array("h")
-    samples.frombytes(raw)
-    return sample_rate, samples
-
-
-def _encode_command(audio_src, censored_wav, out_path) -> List[str]:
-    """ffmpeg args to mux `censored_wav`'s audio over `audio_src`'s video."""
-    return [
-        "ffmpeg", "-y",
-        "-i", str(audio_src),
-        "-i", str(censored_wav),
-        "-map", "0:v?", "-map", "1:a",
-        "-c:v", "copy", "-c:a", "aac",
-        "-shortest",
-        str(out_path),
-    ]
-
-
-def _mux_over_source(audio_src, out_path, sample_rate: int, samples: array) -> Path:
-    """Write `samples` to a temp WAV, then mux it over `audio_src` into `out_path`.
-
-    Video (if any) is copied through unchanged; the audio track is replaced with
-    the bleeped one and encoded to AAC.
-    """
-    with tempfile.TemporaryDirectory() as tmp:
-        censored = str(Path(tmp) / "censored.wav")
-        _write_wav(censored, sample_rate, samples)
-        _run_ffmpeg(_encode_command(audio_src, censored, out_path), audio_src)
-    return Path(out_path)
-
-
-def _run_ffmpeg(cmd: Sequence[str], src) -> None:
-    """Run ffmpeg, surfacing its stderr if it fails instead of a bare traceback."""
-    try:
-        subprocess.run(cmd, check=True, capture_output=True)
-    except subprocess.CalledProcessError as e:
-        raise RuntimeError(
-            f"ffmpeg failed to decode {src}:\n{e.stderr.decode(errors='replace')}"
-        ) from e
-
-
-def _write_wav(out_path, sample_rate: int, samples: array) -> Path:
+def write_wav(out_path, sample_rate: int, samples: array) -> Path:
     """Write an already-clamped 16-bit mono PCM `array` to `out_path` as WAV."""
     with wave.open(str(out_path), "wb") as w:
         w.setnchannels(1)
