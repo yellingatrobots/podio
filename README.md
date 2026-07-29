@@ -27,9 +27,16 @@ Nix supplies the system binaries; `uv` supplies the Python.
 ```sh
 nix develop            # ffmpeg, just, uv
 just sync              # build the environment from uv.lock
+just install           # put `podio` on your PATH
 just                   # list tasks
 just test              # run the tests
 ```
+
+`just install` symlinks `podio` into `~/.local/bin` (pass another directory as
+`just install ~/bin`). It is a symlink rather than a copy — the entry point's
+shebang already points into this repo's `.venv` and the install is editable, so
+there is one environment and edits here take effect immediately. After that,
+`podio` works from any episode directory.
 
 `ffmpeg` is pinned by the flake on purpose: podio reads loudness and per-window
 levels out of ffmpeg's human-readable stderr, so an upstream formatting change
@@ -63,7 +70,7 @@ rig  = "josh"
 3. See what it makes of them, without rendering anything:
 
 ```sh
-uv run --project /path/to/podio podio clean --dry-run
+podio run --dry-run
 ```
 
 Look at the reported noise floor for each take. Around **−75 dB or lower** is a
@@ -73,12 +80,13 @@ see [When a take needs more](#when-a-take-needs-more).
 4. Render:
 
 ```sh
-uv run --project /path/to/podio podio clean
+podio run
 ```
 
-About 30 seconds for two takes, plus `audio.analysis.toml` recording what was
-measured. Worth an alias — `alias podio='uv run --project /path/to/podio podio'`
-— after which everything below is just `podio clean`.
+About 30 seconds of cleaning per two takes, plus detection, plus
+`audio.analysis.toml` recording what was measured.
+
+To clean without censoring:
 
 ```sh
 podio clean                   # every take, full length

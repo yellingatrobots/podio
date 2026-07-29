@@ -12,6 +12,18 @@ default:
 sync:
     uv sync
 
+# Put `podio` on your PATH, so it can be run from an episode directory.
+# A symlink, not a copy: the entry point's shebang already points at this
+# repo's .venv, and the install is editable, so edits here take effect at once.
+install bindir="~/.local/bin": sync
+    #!/usr/bin/env bash
+    set -euo pipefail
+    dir="$(eval echo {{bindir}})"
+    mkdir -p "$dir"
+    ln -sf "$(pwd)/.venv/bin/podio" "$dir/podio"
+    echo "linked $dir/podio -> $(pwd)/.venv/bin/podio"
+    command -v podio >/dev/null || echo "warning: $dir is not on your PATH"
+
 # Run the tests
 test:
     uv run pytest -q
