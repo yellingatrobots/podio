@@ -151,3 +151,44 @@ def test_a_dry_run_censors_nothing(episode):
     assert full_pass(episode, "--dry-run") == 0
     assert not (episode / "alex_prepped.wav").exists()
     assert not (episode / "alex.manifest.json").exists()
+
+
+def make_video(path: Path):
+    """A tiny silent-ish clip: colour bars over a 200 Hz tone."""
+    subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=160x120:rate=15:d=2",
+            "-f", "lavfi", "-i", "sine=f=200:d=2",
+            "-c:v", "mpeg4", "-pix_fmt", "yuv420p", "-c:a", "aac", str(path),
+        ],
+        check=True,
+    )
+
+
+def streams_of(path: Path) -> list[str]:
+    probe = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name",
+         "-of", "csv=p=0", str(path)],
+        capture_output=True, text=True, check=True,
+    )
+    return probe.stdout.split()
+
+
+def test_mux_puts_the_censored_audio_over_the_source_video(tmp_path):
+    make_video(tmp_path / "episode.mp4")
+    make_take(tmp_path / "alex_censored.wav")
+
+    out = tmp_path / "episode_censored.mp4"
+    assert main(["mux", str(tmp_path / "episode.mp4"),
+                 str(tmp_path / "alex_censored.wav"), "--out", str(out)]) == 0
+    assert streams_of(out) == ["mpeg4,video", "aac,audio"]
+
+
+def test_mux_names_its_output_after_the_source_when_not_told(tmp_path):
+    make_video(tmp_path / "episode.mp4")
+    make_take(tmp_path / "alex_censored.wav")
+
+    assert main(["mux", str(tmp_path / "episode.mp4"),
+                 str(tmp_path / "alex_censored.wav")]) == 0
+    assert (tmp_path / "episode_muxed.mp4").exists()

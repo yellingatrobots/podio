@@ -41,6 +41,20 @@ def _cmd_bleep(args) -> int:
     return 0
 
 
+def _cmd_mux(args) -> int:
+    """Put a finished audio track over a source video, keeping the video as-is."""
+    out = args.out or Path(args.video).with_name(
+        f"{Path(args.video).stem}_muxed{Path(args.video).suffix}"
+    )
+    try:
+        ffmpeg.mux(args.video, args.audio, out)
+    except RuntimeError as error:
+        report(f"error: {error}")
+        return 1
+    print(f"wrote {out}")
+    return 0
+
+
 def _cmd_detect(args) -> int:
     wordlist = WordList.from_file(args.wordlist)
     transcriber = WhisperXTranscriber(
@@ -235,6 +249,16 @@ def build_parser() -> argparse.ArgumentParser:
     p_man.add_argument("--out", default="manifest.json")
     add_detect_arguments(p_man, wordlist_default=WORDLIST)
     p_man.set_defaults(func=_cmd_detect)
+
+    p_mux = sub.add_parser(
+        "mux", help="replace a video's audio with a finished track"
+    )
+    p_mux.add_argument("video", help="the source video (its picture is copied through)")
+    p_mux.add_argument("audio", help="the audio to put over it, e.g. a censored wav")
+    p_mux.add_argument(
+        "--out", default=None, help="output file (default: SOURCE_muxed.EXT)"
+    )
+    p_mux.set_defaults(func=_cmd_mux)
 
     p_bleep = sub.add_parser("bleep", help="render censored audio from a manifest")
     p_bleep.add_argument("audio")
