@@ -97,8 +97,9 @@ def test_the_run_records_what_it_measured(episode):
     sidecar = tomllib.loads((episode / "audio.analysis.toml").read_text())
 
     assert sidecar["working_level_db"] == -20.0
+    assert sidecar["working_rate_hz"] == 48000
     assert sidecar["alex"]["output"] == "alex_prepped.wav"
-    assert sidecar["alex"]["chain"].startswith("aresample=48000,highpass=f=80")
+    assert sidecar["alex"]["chain"].startswith("highpass=f=80")
     assert not sidecar["alex"]["clamped"]
 
 

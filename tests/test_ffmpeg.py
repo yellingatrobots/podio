@@ -88,41 +88,34 @@ def test_parse_range_rejects_nonsense():
         parse_range("halfway")
 
 
-def test_analyse_command_measures_in_one_second_windows():
-    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=48000)
+def test_analyse_command_measures_in_one_second_windows_at_the_working_rate():
+    """Resampling first is what makes a window exactly a second wide whatever
+    rate the take arrived at — a short window shifts the noise-floor percentile."""
+    cmd = analyse_command(Path("ian.wav"), audition=None)
     assert cmd[-3:] == ["-f", "null", "-"]
     assert cmd[cmd.index("-af") + 1] == (
-        "asetnsamples=n=48000,astats=metadata=1:reset=1,"
+        "aresample=48000,asetnsamples=n=48000,astats=metadata=1:reset=1,"
         "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
     )
 
 
-def test_the_analysis_window_follows_the_takes_own_rate():
-    """A window has to be a second wide, not 48000 samples wide — otherwise the
-    noise-floor percentile shifts under a take that is not 48 kHz."""
-    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=44100)
-    assert "asetnsamples=n=44100" in cmd[cmd.index("-af") + 1]
-
-
-def test_analysis_does_not_resample_to_measure():
-    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=44100)
-    assert "aresample" not in cmd[cmd.index("-af") + 1]
-
-
 def test_analyse_command_bounds_itself_to_an_audition_range():
-    cmd = analyse_command(Path("ian.wav"), audition=(1290.0, 45.0), sample_rate=48000)
+    cmd = analyse_command(Path("ian.wav"), audition=(1290.0, 45.0))
     assert cmd[cmd.index("-ss") + 1] == "1290"
     assert cmd[cmd.index("-t") + 1] == "45"
 
 
-def test_render_command_meters_while_writing_the_working_file():
-    cmd = render_command(
-        Path("ian.wav"), "aresample=48000,highpass=f=80", Path("tmp.wav"), audition=None
-    )
+def test_render_command_pins_the_working_rate_ahead_of_the_chain():
+    cmd = render_command(Path("ian.wav"), "highpass=f=80", Path("tmp.wav"), None)
     chain = cmd[cmd.index("-af") + 1]
     assert chain == "aresample=48000,highpass=f=80,ebur128=peak=true"
     assert cmd[cmd.index("-c:a") + 1] == "pcm_f32le"
     assert cmd[-1] == "tmp.wav"
+
+
+def test_render_command_survives_a_chain_with_no_stages_enabled():
+    cmd = render_command(Path("ian.wav"), "", Path("tmp.wav"), None)
+    assert cmd[cmd.index("-af") + 1] == "aresample=48000,ebur128=peak=true"
 
 
 def test_apply_gain_writes_24_bit_and_leaves_the_limiter_out_by_default():

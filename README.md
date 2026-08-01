@@ -62,7 +62,6 @@ default `base.en`) from Hugging Face; after that it runs offline.
 
 working_level_db = -24.0
 peak_ceiling_db  = -2.0
-working_rate_hz  = 48000
 
 [takes.ian]
 file = "ian.wav"
@@ -73,12 +72,10 @@ file = "josh.wav"
 rig  = "josh"
 ```
 
-`working_rate_hz` is the rate the chain runs at and prepped takes are written
-at. A take that already arrives at it is never resampled; one that doesn't is
-brought over before the chain, and the run says so. Leave it at 48000 unless you
-have a reason: it is what video work expects, and it is the only rate `rnnoise`
-can run at — asking for another rate with that stage enabled is an error rather
-than a silent override.
+The chain runs at 48 kHz and prepped takes are written at it. That is not
+configurable: it is what video work expects, and it is the only rate `rnnoise`
+can run at. A take arriving at any other rate is brought over once, before the
+chain.
 
 3. See what it makes of them, without rendering anything:
 

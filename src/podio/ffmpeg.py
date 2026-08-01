@@ -1,8 +1,7 @@
 """Building ffmpeg command lines and reading what ffmpeg says back.
 
-Cleaning is an ffprobe for the take's rate, then three passes. The middle pass
-is the only expensive one: ebur128 meters while passing audio through, so the
-chain runs once rather than twice.
+Cleaning is three passes. The middle one is the only expensive one: ebur128
+meters while passing audio through, so the chain runs once rather than twice.
 """
 
 import re
@@ -17,6 +16,10 @@ from .levels import db_to_linear
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
 WINDOW_SECONDS = 1
+#: The rate the chain runs at, and so the rate every prepped take is written at.
+#: 48 kHz because that is what video work expects and the only rate `rnnoise`
+#: can run at. Every take is brought to it before the chain, once.
+WORKING_RATE = 48_000
 #: WhisperX expects 16 kHz mono. Only the ASR input is downsampled.
 ASR_RATE = 16_000
 #: Where in the sorted per-window levels the noise floor is taken from. Low
@@ -80,25 +83,6 @@ def parse_loudness(output: str) -> tuple[float, float]:
     return float(integrated[-1]), float(peak[-1])
 
 
-def probe_sample_rate(source) -> int:
-    """The sample rate of `source`'s first audio stream."""
-    command = [
-        "ffprobe", "-v", "error",
-        "-select_streams", "a:0",
-        "-show_entries", "stream=sample_rate",
-        "-of", "default=noprint_wrappers=1:nokey=1",
-        str(source),
-    ]
-    result = subprocess.run(command, capture_output=True)
-    reported = _text(result.stdout).strip()
-    if result.returncode != 0 or not reported.isdigit():
-        raise RuntimeError(
-            f"could not read a sample rate from {source}:\n"
-            f"  {' '.join(command)}\n\n{_text(result.stderr).strip()}"
-        )
-    return int(reported)
-
-
 def _base(source: Path, audition: Audition) -> list[str]:
     cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y"]
     if audition:
@@ -107,17 +91,20 @@ def _base(source: Path, audition: Audition) -> list[str]:
     return cmd + ["-i", str(source)]
 
 
-def analyse_command(source: Path, audition: Audition, sample_rate: int) -> list[str]:
+def analyse_command(source: Path, audition: Audition) -> list[str]:
     """Pass 1: report a level per one-second window, write no audio.
 
-    Windows are sized from the take's own rate. Nothing is resampled: this pass
-    measures and discards, and `parse_noise_floor` takes a percentile over the
-    windows, so a window that is not a second wide moves the estimate.
+    The take is brought to the working rate first, so a window is exactly a
+    second wide whatever rate the take arrived at — `parse_noise_floor` takes a
+    percentile over the windows, and a short window would move the estimate.
+    It also measures the audio the chain will actually see, which is what the
+    thresholds resolved from this floor are applied to.
     """
-    chain = (
-        f"asetnsamples=n={sample_rate * WINDOW_SECONDS}"
-        f",astats=metadata=1:reset=1"
-        f",ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
+    chain = _filters(
+        f"aresample={WORKING_RATE}",
+        f"asetnsamples=n={WORKING_RATE * WINDOW_SECONDS}",
+        "astats=metadata=1:reset=1",
+        "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
     )
     return _base(source, audition) + ["-af", chain, "-f", "null", "-"]
 
@@ -125,14 +112,24 @@ def analyse_command(source: Path, audition: Audition, sample_rate: int) -> list[
 def render_command(
     source: Path, chain: str, destination: Path, audition: Audition
 ) -> list[str]:
-    """Pass 2: run the chain into a float working file, metering as it goes."""
+    """Pass 2: run the chain into a float working file, metering as it goes.
+
+    The rate is pinned here rather than inside the chain: every stage is
+    configured against the working rate and `rnnoise` runs at no other, so it is
+    an invariant of the pass and not something a chain can opt out of.
+    """
     return _base(source, audition) + [
         "-af",
-        f"{chain},ebur128=peak=true",
+        _filters(f"aresample={WORKING_RATE}", chain, "ebur128=peak=true"),
         "-c:a",
         "pcm_f32le",
         str(destination),
     ]
+
+
+def _filters(*fragments: str) -> str:
+    """Join filter fragments, skipping the empty ones a bare chain can produce."""
+    return ",".join(f for f in fragments if f)
 
 
 def apply_gain_command(

@@ -16,10 +16,6 @@ OUTPUT_SUFFIXES = ("_prepped", "_censored", "_audition")
 #: What a scaffolded episode starts at. Low enough to leave the NLE room.
 DEFAULT_WORKING_LEVEL_DB = -24.0
 DEFAULT_PEAK_CEILING_DB = -2.0
-#: The rate the chain runs at and prepped takes are written at. 48 kHz because
-#: that is what video work expects and the only rate `rnnoise` can run at; a
-#: take already at this rate is never resampled.
-DEFAULT_WORKING_RATE_HZ = 48_000
 #: Take sub-tables that configure something other than a stage of the chain,
 #: and so must not be matched against the rig's stage names.
 NON_STAGE_TABLES = {"censor"}
@@ -49,7 +45,6 @@ class Take:
 class Episode:
     working_level_db: float
     peak_ceiling_db: float
-    working_rate_hz: int
     takes: list[Take]
 
 
@@ -74,7 +69,6 @@ def stub_toml(episode_dir: Path, rigs_dir: Path) -> str:
         "",
         f"working_level_db = {DEFAULT_WORKING_LEVEL_DB}",
         f"peak_ceiling_db  = {DEFAULT_PEAK_CEILING_DB}",
-        f"working_rate_hz  = {DEFAULT_WORKING_RATE_HZ}",
     ]
     for take in takes:
         lines += ["", f"[takes.{take.stem}]", f'file = "{take.name}"']
@@ -138,7 +132,6 @@ def load_episode(config_path: Path, rigs_dir: Path) -> Episode:
     return Episode(
         working_level_db=episode.get("working_level_db", -20.0),
         peak_ceiling_db=episode.get("peak_ceiling_db", -3.0),
-        working_rate_hz=int(episode.get("working_rate_hz", DEFAULT_WORKING_RATE_HZ)),
         takes=takes,
     )
 

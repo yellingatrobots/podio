@@ -58,10 +58,11 @@ for the NLE to mix and finalise.
 _Avoid_: target loudness, LUFS target, normalization target
 
 **Working Rate**:
-The sample rate the chain runs at, and so the rate every prepped and censored
-take is written at. A take arriving at another rate is resampled to it once,
-before the chain; a take already at it is passed through untouched. Distinct
-from the **working level**, which is about loudness rather than rate.
+48 kHz — the sample rate the chain runs at, and so the rate every prepped and
+censored take is written at. Fixed, not configurable: it is what video work
+expects and the only rate `rnnoise` runs at. Every take is brought to it once,
+before the chain. Distinct from the **working level**, which is about loudness
+rather than rate.
 _Avoid_: sample rate, target rate, project rate
 
 **Gain Match**:
