@@ -75,19 +75,45 @@ def test_unknown_parameter_is_rejected():
         build_stage({"name": "gate", "thresold_db": -40})
 
 
-def test_chain_starts_at_48k_because_rnnoise_requires_it():
-    chain = build_chain([{"name": "highpass", "f": 80}], IAN, MODELS)
+def chain_of(specs, *, source_rate=48000, target_rate=48000):
+    return build_chain(
+        specs, IAN, MODELS, source_rate=source_rate, target_rate=target_rate
+    )
+
+
+def test_a_take_already_at_the_working_rate_is_not_resampled():
+    assert chain_of([{"name": "highpass", "f": 80}]) == "highpass=f=80"
+
+
+def test_a_take_at_another_rate_is_brought_to_the_working_rate_first():
+    chain = chain_of([{"name": "highpass", "f": 80}], source_rate=44100)
     assert chain == "aresample=48000,highpass=f=80"
 
 
 def test_disabled_stages_are_absent_from_the_chain():
-    chain = build_chain(
+    chain = chain_of(
         [
             {"name": "highpass", "f": 90},
             {"name": "rnnoise", "enabled": False},
             {"name": "deesser"},
-        ],
-        IAN,
-        MODELS,
+        ]
     )
-    assert chain == "aresample=48000,highpass=f=90,deesser=i=0.4:f=0.5:m=0.5"
+    assert chain == "highpass=f=90,deesser=i=0.4:f=0.5:m=0.5"
+
+
+def test_rnnoise_refuses_a_working_rate_it_cannot_run_at():
+    with pytest.raises(ValueError, match="rnnoise"):
+        chain_of(
+            [{"name": "rnnoise", "enabled": True}],
+            source_rate=44100,
+            target_rate=44100,
+        )
+
+
+def test_a_disabled_rnnoise_does_not_constrain_the_working_rate():
+    chain = chain_of(
+        [{"name": "rnnoise", "enabled": False}, {"name": "highpass", "f": 80}],
+        source_rate=44100,
+        target_rate=44100,
+    )
+    assert chain == "highpass=f=80"

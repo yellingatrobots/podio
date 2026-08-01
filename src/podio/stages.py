@@ -30,6 +30,8 @@ class Stage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     stage_name: ClassVar[str]
+    #: The one rate this stage can run at, where it only has one.
+    required_rate: ClassVar[int | None] = None
     enabled: bool = True
 
     def filter(self, measured: Measured, models_dir: Path) -> str:
@@ -67,6 +69,8 @@ class RNNoise(Stage):
     """Neural denoiser. Judges voice vs not-voice, so it can chew laughter."""
 
     stage_name: ClassVar[str] = "rnnoise"
+    #: The models are trained at 48 kHz and arnndn will not run at anything else.
+    required_rate: ClassVar[int] = 48_000
     name: Literal["rnnoise"] = "rnnoise"
     enabled: bool = False
     model: str = "lq"
@@ -164,10 +168,34 @@ def build_stage(spec: dict[str, Any]) -> Stage:
     return REGISTRY[name](**spec)
 
 
+def _check_rate(stages: list[Stage], target_rate: int) -> None:
+    """Refuse a working rate a stage in this chain cannot run at."""
+    for stage in stages:
+        if stage.required_rate not in (None, target_rate):
+            raise ValueError(
+                f"{stage.stage_name} only runs at {stage.required_rate} Hz, but this "
+                f"episode's working_rate_hz is {target_rate}; set it to "
+                f"{stage.required_rate} or switch {stage.stage_name} off"
+            )
+
+
 def build_chain(
-    specs: list[dict[str, Any]], measured: Measured, models_dir: Path
+    specs: list[dict[str, Any]],
+    measured: Measured,
+    models_dir: Path,
+    *,
+    source_rate: int,
+    target_rate: int,
 ) -> str:
-    """The pass-2 filter graph: 48 kHz first, then every enabled stage in order."""
-    stages = [build_stage(spec) for spec in specs]
-    filters = [s.filter(measured, models_dir) for s in stages if s.enabled]
-    return ",".join(["aresample=48000", *(f for f in filters if f)])
+    """The pass-2 filter graph: every enabled stage in order.
+
+    A take already at the working rate is not resampled — converting 48 kHz to
+    48 kHz is a no-op that costs nothing but says something untrue about the
+    pipeline. A take at another rate is brought over first, because the stages
+    downstream are configured against one rate and `rnnoise` only runs at 48 kHz.
+    """
+    stages = [s for s in (build_stage(spec) for spec in specs) if s.enabled]
+    _check_rate(stages, target_rate)
+    filters = [s.filter(measured, models_dir) for s in stages]
+    head = [] if source_rate == target_rate else [f"aresample={target_rate}"]
+    return ",".join([*head, *(f for f in filters if f)])

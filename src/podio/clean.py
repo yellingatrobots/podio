@@ -43,10 +43,19 @@ def process(
         ffmpeg.run_stdout(ffmpeg.analyse_command(take.source, audition, source_rate))
     )
     measured = Measured(floor_db=floor)
-    chain = build_chain(take.chain, measured, models_dir)
+    chain = build_chain(
+        take.chain,
+        measured,
+        models_dir,
+        source_rate=source_rate,
+        target_rate=episode.working_rate_hz,
+    )
     suffix = "_audition" if audition else "_prepped"
     output = take.source.parent / f"{take.name}{suffix}.wav"
-    report(f"{take.name:6} floor {floor:7.1f} dB")
+    resampled = "" if source_rate == episode.working_rate_hz else (
+        f"  -> {episode.working_rate_hz} Hz"
+    )
+    report(f"{take.name:6} floor {floor:7.1f} dB  {source_rate} Hz{resampled}")
 
     if dry_run:
         report(f"{take.name:6} chain {chain}")
@@ -85,6 +94,7 @@ def write_sidecar(path: Path, episode: config_module.Episode, results: list[Resu
         "# a record of one run; never read back as input",
         f"working_level_db = {episode.working_level_db}",
         f"peak_ceiling_db = {episode.peak_ceiling_db}",
+        f"working_rate_hz = {episode.working_rate_hz}",
     ]
     for r in results:
         lines += [

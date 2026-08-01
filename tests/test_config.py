@@ -90,6 +90,32 @@ def test_load_episode_resolves_takes_against_their_rigs(tmp_path):
     assert take.chain[1] == {"name": "afftdn", "enabled": True}
 
 
+def test_an_episode_works_at_48k_unless_it_says_otherwise(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [takes.ian]
+        file = "ian.wav"
+        """,
+        {"ian": IAN_RIG},
+    )
+    assert load_episode(config, rigs).working_rate_hz == 48000
+
+
+def test_an_episode_can_choose_its_own_working_rate(tmp_path):
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        working_rate_hz = 44100
+
+        [takes.ian]
+        file = "ian.wav"
+        """,
+        {"ian": IAN_RIG},
+    )
+    assert load_episode(config, rigs).working_rate_hz == 44100
+
+
 def test_a_take_can_ask_for_the_limiter(tmp_path):
     config, rigs = write_episode(
         tmp_path,
