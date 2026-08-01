@@ -7,7 +7,7 @@ about them.
 """
 
 from pathlib import Path
-from typing import Any, ClassVar, Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -29,7 +29,6 @@ def _linear(db: float) -> str:
 class Stage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    stage_name: ClassVar[str]
     enabled: bool = True
 
     def filter(self, measured: Measured, models_dir: Path) -> str:
@@ -37,7 +36,6 @@ class Stage(BaseModel):
 
 
 class Highpass(Stage):
-    stage_name: ClassVar[str] = "highpass"
     name: Literal["highpass"] = "highpass"
     f: float = 80.0
 
@@ -48,7 +46,6 @@ class Highpass(Stage):
 class Afftdn(Stage):
     """Spectral subtraction. The right tool for a steady fan or HVAC."""
 
-    stage_name: ClassVar[str] = "afftdn"
     name: Literal["afftdn"] = "afftdn"
     noise_floor_db: DbParam = "floor"
     reduction_db: float = 12.0
@@ -70,7 +67,6 @@ class RNNoise(Stage):
     which is one of the reasons the chain is pinned to that rate.
     """
 
-    stage_name: ClassVar[str] = "rnnoise"
     name: Literal["rnnoise"] = "rnnoise"
     enabled: bool = False
     model: str = "lq"
@@ -86,7 +82,6 @@ class RNNoise(Stage):
 
 
 class Gate(Stage):
-    stage_name: ClassVar[str] = "gate"
     name: Literal["gate"] = "gate"
     threshold_db: DbParam = "floor+12"
     range_db: float = -40.0
@@ -112,7 +107,6 @@ class Band(BaseModel):
 
 
 class Eq(Stage):
-    stage_name: ClassVar[str] = "eq"
     name: Literal["eq"] = "eq"
     enabled: bool = False
     bands: list[Band] = []
@@ -125,7 +119,6 @@ class Eq(Stage):
 
 
 class Compressor(Stage):
-    stage_name: ClassVar[str] = "compressor"
     name: Literal["compressor"] = "compressor"
     threshold_db: float = -18.0
     ratio: float = 3.0
@@ -140,7 +133,6 @@ class Compressor(Stage):
 
 
 class Deesser(Stage):
-    stage_name: ClassVar[str] = "deesser"
     name: Literal["deesser"] = "deesser"
     intensity: float = 0.4
     frequency: float = 0.5
@@ -153,8 +145,10 @@ class Deesser(Stage):
         )
 
 
+#: A stage is keyed by the `name` it already declares — the one a config writes
+#: and pydantic validates against. Nothing has to restate it.
 REGISTRY: dict[str, type[Stage]] = {
-    cls.stage_name: cls
+    cls.model_fields["name"].default: cls
     for cls in (Highpass, Afftdn, RNNoise, Gate, Eq, Compressor, Deesser)
 }
 

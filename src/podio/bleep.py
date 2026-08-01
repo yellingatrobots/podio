@@ -47,12 +47,7 @@ def bleep_pcm(
 
 
 def render_file(
-    audio_src,
-    manifest_path,
-    out_path,
-    *,
-    freq: float = 1000.0,
-    amplitude: int = TONE_AMPLITUDE,
+    audio_src, manifest_path, out_path, *, freq: float = 1000.0
 ) -> Path:
     """Bleep `audio_src` per the spans in `manifest_path`, write it to `out_path`.
 
@@ -69,7 +64,7 @@ def render_file(
     """
     spans = _load_spans(manifest_path)
     sample_rate, samples = ffmpeg.decode_pcm(audio_src)
-    out = bleep_pcm(samples, sample_rate, spans, freq=freq, amplitude=amplitude)
+    out = bleep_pcm(samples, sample_rate, spans, freq=freq)
 
     out_path = Path(out_path)
     if out_path.suffix.lower() == ".wav":
