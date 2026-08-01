@@ -78,7 +78,9 @@ def render_file(
         write_wav(spliced, sample_rate, out)
         if out_path.suffix.lower() == ".wav":
             return ffmpeg.to_wav24(spliced, out_path)
-        return ffmpeg.mux(audio_src, spliced, out_path)
+        # Down to 24 bits before muxing: a container that carries PCM copies the
+        # stream as it is, and the splice's low 8 bits are zero by construction.
+        return ffmpeg.mux(audio_src, ffmpeg.to_wav24(spliced, Path(tmp) / "24.wav"), out_path)
 
 
 def _load_spans(manifest_path) -> List[Tuple[float, float]]:

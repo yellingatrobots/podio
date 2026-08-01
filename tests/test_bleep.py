@@ -82,24 +82,51 @@ def test_a_wav_render_is_written_as_24_bit():
     assert "pcm_s24le" in wav24_command("spliced.wav", "out.wav")
 
 
-@pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
-def test_rendering_a_24_bit_take_keeps_its_depth(tmp_path):
-    source = tmp_path / "take.wav"
+needs_ffmpeg = pytest.mark.skipif(
+    shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH"
+)
+
+
+def take_24_bit(path, *, rate: int = 48000):
     subprocess.run(
         ["ffmpeg", "-v", "error", "-y", "-f", "lavfi",
-         "-i", "sine=frequency=200:duration=1:sample_rate=48000",
-         "-c:a", "pcm_s24le", str(source)],
+         "-i", f"sine=frequency=200:duration=1:sample_rate={rate}",
+         "-c:a", "pcm_s24le", str(path)],
         check=True,
     )
-    manifest = tmp_path / "m.json"
-    manifest.write_text('{"spans": [{"start": 0.2, "end": 0.4}]}')
-    out = tmp_path / "censored.wav"
+    return path
 
-    render_file(source, manifest, out)
 
-    probe = subprocess.run(
+def probe(path) -> str:
+    result = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "stream=codec_name,sample_rate,channels", "-of", "csv=p=0", str(out)],
+         "stream=codec_name,sample_rate,channels", "-of", "csv=p=0", str(path)],
         capture_output=True, text=True, check=True,
     )
-    assert probe.stdout.strip() == "pcm_s24le,48000,1"
+    return result.stdout.strip()
+
+
+def one_span(path):
+    path.write_text('{"spans": [{"start": 0.2, "end": 0.4}]}')
+    return path
+
+
+@needs_ffmpeg
+def test_rendering_a_24_bit_take_keeps_its_depth(tmp_path):
+    source = take_24_bit(tmp_path / "take.wav")
+    out = tmp_path / "censored.wav"
+
+    render_file(source, one_span(tmp_path / "m.json"), out)
+
+    assert probe(out) == "pcm_s24le,48000,1"
+
+
+@needs_ffmpeg
+def test_muxing_writes_24_bit_rather_than_the_32_bit_splice(tmp_path):
+    """The low 8 bits of the splice are zero; carrying them costs a third more."""
+    source = take_24_bit(tmp_path / "take.wav")
+    out = tmp_path / "censored.mov"
+
+    render_file(source, one_span(tmp_path / "m.json"), out)
+
+    assert probe(out) == "pcm_s24le,48000,1"
