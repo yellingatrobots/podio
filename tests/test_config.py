@@ -1,6 +1,11 @@
 import pytest
 
-from podio.config import load_episode, merge_chain
+from podio.config import (
+    DEFAULT_PEAK_CEILING_DB,
+    DEFAULT_WORKING_LEVEL_DB,
+    load_episode,
+    merge_chain,
+)
 
 RIG_CHAIN = [
     {"name": "highpass", "f": 80},
@@ -88,6 +93,23 @@ def test_load_episode_resolves_takes_against_their_rigs(tmp_path):
     assert take.source == tmp_path / "ian.wav"
     assert take.limiter is False
     assert take.chain[1] == {"name": "afftdn", "enabled": True}
+
+
+def test_an_episode_that_says_nothing_gets_the_one_default(tmp_path):
+    """The same pair a scaffolded episode is written with — there is no second
+    set of defaults hiding behind an omitted key."""
+    config, rigs = write_episode(
+        tmp_path,
+        """
+        [takes.ian]
+        file = "ian.wav"
+        """,
+        {"ian": IAN_RIG},
+    )
+    episode = load_episode(config, rigs)
+
+    assert episode.working_level_db == DEFAULT_WORKING_LEVEL_DB == -24.0
+    assert episode.peak_ceiling_db == DEFAULT_PEAK_CEILING_DB == -2.0
 
 
 def test_a_take_can_ask_for_the_limiter(tmp_path):

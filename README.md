@@ -72,6 +72,13 @@ file = "josh.wav"
 rig  = "josh"
 ```
 
+`working_level_db = -24.0` and `peak_ceiling_db = -2.0` are what you get whether
+you write them or leave them out — the scaffold puts them in so they are visible
+and easy to change, not because omitting them means something else. The 22 dB
+between them is what a take's peak-to-loudness ratio has to exceed before the
+gain match clamps, which is comfortably clear of conversational speech even with
+a laugh in it.
+
 The chain runs at 48 kHz and prepped takes are written at it. That is not
 configurable: it is what video work expects, and it is the only rate `rnnoise`
 can run at. A take arriving at any other rate is brought over once, before the

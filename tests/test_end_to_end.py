@@ -26,9 +26,6 @@ ratio = 3
 """
 
 EPISODE = """
-working_level_db = -20.0
-peak_ceiling_db = -3.0
-
 [takes.alex]
 file = "alex.wav"
 rig = "booth"
@@ -77,8 +74,8 @@ def test_a_prepped_take_lands_on_the_working_level(episode):
     assert run_on(episode) == 0
 
     integrated, peak = loudness_of(episode / "alex_prepped.wav")
-    assert integrated == pytest.approx(-20.0, abs=0.5)
-    assert peak < -3.0
+    assert integrated == pytest.approx(-24.0, abs=0.5)
+    assert peak < -2.0
 
 
 def test_the_prepped_take_is_24_bit_48k_mono(episode):
@@ -96,7 +93,8 @@ def test_the_run_records_what_it_measured(episode):
     run_on(episode)
     sidecar = tomllib.loads((episode / "audio.analysis.toml").read_text())
 
-    assert sidecar["working_level_db"] == -20.0
+    assert sidecar["working_level_db"] == -24.0
+    assert sidecar["peak_ceiling_db"] == -2.0
     assert sidecar["working_rate_hz"] == 48000
     assert sidecar["alex"]["output"] == "alex_prepped.wav"
     assert sidecar["alex"]["chain"].startswith("highpass=f=80")

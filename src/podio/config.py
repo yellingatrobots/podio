@@ -13,7 +13,12 @@ from typing import Any
 TAKE_KEYS = {"file", "rig", "limiter"}
 #: What podio itself writes into an episode directory. Never a take.
 OUTPUT_SUFFIXES = ("_prepped", "_censored", "_audition")
-#: What a scaffolded episode starts at. Low enough to leave the NLE room.
+#: The working level and peak ceiling, wherever an episode does not say
+#: otherwise — both what a scaffolded episode starts at and what an episode
+#: omitting the key gets. Low enough to leave the NLE room, and far enough
+#: apart to absorb a 22 dB peak-to-loudness ratio before the gain match has to
+#: clamp. `levels.TONE_LEVEL_DB` is derived from the working level: move one
+#: and move the other.
 DEFAULT_WORKING_LEVEL_DB = -24.0
 DEFAULT_PEAK_CEILING_DB = -2.0
 #: Take sub-tables that configure something other than a stage of the chain,
@@ -130,8 +135,8 @@ def load_episode(config_path: Path, rigs_dir: Path) -> Episode:
         for name, table in takes_table.items()
     ]
     return Episode(
-        working_level_db=episode.get("working_level_db", -20.0),
-        peak_ceiling_db=episode.get("peak_ceiling_db", -3.0),
+        working_level_db=episode.get("working_level_db", DEFAULT_WORKING_LEVEL_DB),
+        peak_ceiling_db=episode.get("peak_ceiling_db", DEFAULT_PEAK_CEILING_DB),
         takes=takes,
     )
 
