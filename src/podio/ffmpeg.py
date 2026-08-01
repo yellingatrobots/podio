@@ -150,13 +150,52 @@ def decode_command(source: Path, destination: Path) -> list[str]:
     ]
 
 
-def wav24_command(source: Path, destination: Path) -> list[str]:
-    """Re-encode a spliced WAV down to 24-bit, the depth a take arrives at."""
-    return ["ffmpeg", "-y", "-i", str(source), "-c:a", "pcm_s24le", str(destination)]
+def _splice_input(sample_rate: int) -> list[str]:
+    """Args for reading a spliced take off stdin.
+
+    The splice arrives as the raw bytes of a mono 32-bit ``array``, which is
+    native-endian; every platform podio runs on is little-endian, so ``s32le``
+    describes it. Feeding it in saves writing a full-length intermediate WAV and
+    reading it back — an hour-long take is about half a gigabyte each way.
+    """
+    return ["-f", "s32le", "-ar", str(sample_rate), "-ac", "1", "-i", "-"]
 
 
-def to_wav24(source, destination) -> Path:
-    _execute(wav24_command(Path(source), Path(destination)))
+def write_pcm_command(sample_rate: int, destination: Path) -> list[str]:
+    """Read the splice on stdin, write it at 24-bit — the depth a take arrives at."""
+    return [
+        "ffmpeg", "-y",
+        *_splice_input(sample_rate),
+        "-c:a", "pcm_s24le",
+        str(destination),
+    ]
+
+
+def mux_pcm_command(source: Path, sample_rate: int, destination: Path) -> list[str]:
+    """Read the splice on stdin, put it over `source`'s video."""
+    return [
+        "ffmpeg", "-y",
+        "-i", str(source),
+        *_splice_input(sample_rate),
+        "-map", "0:v?", "-map", "1:a",
+        "-c:v", "copy", "-c:a", _audio_codec(destination),
+        "-shortest",
+        str(destination),
+    ]
+
+
+def write_pcm(samples, sample_rate: int, destination) -> Path:
+    """Write a spliced take straight to `destination` at 24-bit."""
+    _execute(write_pcm_command(sample_rate, Path(destination)), samples.tobytes())
+    return Path(destination)
+
+
+def mux_pcm(source, samples, sample_rate: int, destination) -> Path:
+    """Put a spliced take over `source`'s video, copying the picture through."""
+    _execute(
+        mux_pcm_command(Path(source), sample_rate, Path(destination)),
+        samples.tobytes(),
+    )
     return Path(destination)
 
 
@@ -179,11 +218,20 @@ def decode_pcm(source) -> tuple[int, array]:
     return sample_rate, samples
 
 
+def _audio_codec(destination: Path) -> str:
+    """What the mux can write: PCM where the container carries it, else AAC.
+
+    A container that carries PCM keeps the audio bit-for-bit; anywhere else it
+    has to be encoded, and the censored track loses a generation.
+    """
+    return "pcm_s24le" if Path(destination).suffix.lower() in PCM_CONTAINERS else "aac"
+
+
 def mux_command(source: Path, audio: Path, destination: Path) -> list[str]:
     """ffmpeg args to put `audio` over `source`'s video into `destination`.
 
-    A container that carries PCM takes the WAV as it is; anywhere else the
-    audio has to be encoded, and the censored track loses a generation.
+    `audio` is a finished file, so a PCM container copies it rather than
+    re-encoding: it is already at the depth it should be.
     """
     codec = "copy" if Path(destination).suffix.lower() in PCM_CONTAINERS else "aac"
     return [
@@ -203,20 +251,28 @@ def mux(source, audio, destination) -> Path:
     return Path(destination)
 
 
-def _execute(command: list[str]) -> subprocess.CompletedProcess:
-    result = subprocess.run(command, capture_output=True, text=True)
+def _execute(
+    command: list[str], stdin: bytes | None = None
+) -> subprocess.CompletedProcess:
+    """Run ffmpeg, optionally feeding it `stdin`. Pipes stay binary; only the
+    diagnostics ffmpeg writes are decoded, and never strictly."""
+    result = subprocess.run(command, input=stdin, capture_output=True)
     if result.returncode != 0:
         raise RuntimeError(
-            f"ffmpeg failed:\n  {' '.join(command)}\n\n{result.stderr.strip()}"
+            f"ffmpeg failed:\n  {' '.join(command)}\n\n{_text(result.stderr).strip()}"
         )
     return result
 
 
+def _text(raw: bytes) -> str:
+    return raw.decode("utf-8", errors="replace")
+
+
 def run(command: list[str]) -> str:
     """Run ffmpeg, returning stderr — where its summaries are printed."""
-    return _execute(command).stderr
+    return _text(_execute(command).stderr)
 
 
 def run_stdout(command: list[str]) -> str:
     """Run ffmpeg, returning stdout — where ametadata writes."""
-    return _execute(command).stdout
+    return _text(_execute(command).stdout)

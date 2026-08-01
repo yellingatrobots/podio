@@ -5,7 +5,12 @@ import subprocess
 import pytest
 
 from podio.bleep import bleep_pcm, render_file
-from podio.ffmpeg import decode_command, mux_command, wav24_command
+from podio.ffmpeg import (
+    decode_command,
+    mux_command,
+    mux_pcm_command,
+    write_pcm_command,
+)
 
 
 def test_mux_command_muxes_censored_audio_over_source_video():
@@ -78,8 +83,30 @@ def test_decode_asks_ffmpeg_for_32_bit_samples():
     assert "pcm_s32le" in decode_command("in.wav", "out.wav")
 
 
-def test_a_wav_render_is_written_as_24_bit():
-    assert "pcm_s24le" in wav24_command("spliced.wav", "out.wav")
+def test_a_wav_render_reads_the_splice_on_stdin_and_writes_24_bit():
+    cmd = write_pcm_command(48000, "out.wav")
+
+    assert cmd[cmd.index("-f") + 1] == "s32le"
+    assert cmd[cmd.index("-ar") + 1] == "48000"
+    assert cmd[cmd.index("-ac") + 1] == "1"
+    assert cmd[cmd.index("-i") + 1] == "-"
+    assert cmd[cmd.index("-c:a") + 1] == "pcm_s24le"
+    assert cmd[-1] == "out.wav"
+
+
+def test_a_muxed_render_reads_the_splice_on_stdin():
+    cmd = mux_pcm_command("in.mov", 44100, "out.mov")
+
+    assert cmd[cmd.index("-i") + 1] == "in.mov"      # input 0: the source
+    assert cmd[cmd.index("-ar") + 1] == "44100"      # input 1: the splice
+    assert cmd[cmd.index("-c:a") + 1] == "pcm_s24le"
+    assert cmd[-1] == "out.mov"
+
+
+def test_a_muxed_render_encodes_where_the_container_cannot_carry_pcm():
+    cmd = mux_pcm_command("in.mp4", 48000, "out.mp4")
+
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
 
 
 needs_ffmpeg = pytest.mark.skipif(
