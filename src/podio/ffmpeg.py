@@ -16,7 +16,6 @@ from .levels import db_to_linear
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
 WINDOW_SECONDS = 1
-WORKING_RATE = 48000
 #: WhisperX expects 16 kHz mono. Only the ASR input is downsampled.
 ASR_RATE = 16_000
 #: Where in the sorted per-window levels the noise floor is taken from. Low
@@ -80,6 +79,25 @@ def parse_loudness(output: str) -> tuple[float, float]:
     return float(integrated[-1]), float(peak[-1])
 
 
+def probe_sample_rate(source) -> int:
+    """The sample rate of `source`'s first audio stream."""
+    command = [
+        "ffprobe", "-v", "error",
+        "-select_streams", "a:0",
+        "-show_entries", "stream=sample_rate",
+        "-of", "default=noprint_wrappers=1:nokey=1",
+        str(source),
+    ]
+    result = subprocess.run(command, capture_output=True)
+    reported = _text(result.stdout).strip()
+    if result.returncode != 0 or not reported.isdigit():
+        raise RuntimeError(
+            f"could not read a sample rate from {source}:\n"
+            f"  {' '.join(command)}\n\n{_text(result.stderr).strip()}"
+        )
+    return int(reported)
+
+
 def _base(source: Path, audition: Audition) -> list[str]:
     cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y"]
     if audition:
@@ -88,11 +106,15 @@ def _base(source: Path, audition: Audition) -> list[str]:
     return cmd + ["-i", str(source)]
 
 
-def analyse_command(source: Path, audition: Audition) -> list[str]:
-    """Pass 1: report a level per one-second window, write no audio."""
+def analyse_command(source: Path, audition: Audition, sample_rate: int) -> list[str]:
+    """Pass 1: report a level per one-second window, write no audio.
+
+    Windows are sized from the take's own rate. Nothing is resampled: this pass
+    measures and discards, and `parse_noise_floor` takes a percentile over the
+    windows, so a window that is not a second wide moves the estimate.
+    """
     chain = (
-        f"aresample={WORKING_RATE}"
-        f",asetnsamples=n={WORKING_RATE * WINDOW_SECONDS}"
+        f"asetnsamples=n={sample_rate * WINDOW_SECONDS}"
         f",astats=metadata=1:reset=1"
         f",ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
     )

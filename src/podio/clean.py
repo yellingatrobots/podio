@@ -38,8 +38,9 @@ def process(
     workdir: Path,
     dry_run: bool,
 ) -> Result:
+    source_rate = ffmpeg.probe_sample_rate(take.source)
     floor = ffmpeg.parse_noise_floor(
-        ffmpeg.run_stdout(ffmpeg.analyse_command(take.source, audition))
+        ffmpeg.run_stdout(ffmpeg.analyse_command(take.source, audition, source_rate))
     )
     measured = Measured(floor_db=floor)
     chain = build_chain(take.chain, measured, models_dir)

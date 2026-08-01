@@ -88,17 +88,29 @@ def test_parse_range_rejects_nonsense():
         parse_range("halfway")
 
 
-def test_analyse_command_measures_in_one_second_windows_at_the_working_rate():
-    cmd = analyse_command(Path("ian.wav"), audition=None)
+def test_analyse_command_measures_in_one_second_windows():
+    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=48000)
     assert cmd[-3:] == ["-f", "null", "-"]
     assert cmd[cmd.index("-af") + 1] == (
-        "aresample=48000,asetnsamples=n=48000,astats=metadata=1:reset=1,"
+        "asetnsamples=n=48000,astats=metadata=1:reset=1,"
         "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-"
     )
 
 
+def test_the_analysis_window_follows_the_takes_own_rate():
+    """A window has to be a second wide, not 48000 samples wide — otherwise the
+    noise-floor percentile shifts under a take that is not 48 kHz."""
+    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=44100)
+    assert "asetnsamples=n=44100" in cmd[cmd.index("-af") + 1]
+
+
+def test_analysis_does_not_resample_to_measure():
+    cmd = analyse_command(Path("ian.wav"), audition=None, sample_rate=44100)
+    assert "aresample" not in cmd[cmd.index("-af") + 1]
+
+
 def test_analyse_command_bounds_itself_to_an_audition_range():
-    cmd = analyse_command(Path("ian.wav"), audition=(1290.0, 45.0))
+    cmd = analyse_command(Path("ian.wav"), audition=(1290.0, 45.0), sample_rate=48000)
     assert cmd[cmd.index("-ss") + 1] == "1290"
     assert cmd[cmd.index("-t") + 1] == "45"
 
