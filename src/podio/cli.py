@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import os
 import sys
-import tempfile
 import textwrap
 from pathlib import Path
 
@@ -63,15 +62,12 @@ def _cmd_detect(args) -> int:
         model_size=args.model, device=args.device, language=args.language
     )
 
-    with tempfile.TemporaryDirectory() as tmp:
-        normalized = str(Path(tmp) / "normalized.wav")
-        ffmpeg.normalize(args.audio, normalized)
-        transcript, manifest = transcribe_and_detect(
-            normalized, transcriber, wordlist,
-            inset=args.inset, min_confidence=args.min_confidence,
-        )
-    # Report against the original file, not the temp normalized copy.
-    transcript.audio_path = manifest.audio_path = args.audio
+    # Straight at the file: WhisperX decodes what its model needs, so converting
+    # here first only did the same work twice. See censor.detect_into.
+    transcript, manifest = transcribe_and_detect(
+        args.audio, transcriber, wordlist,
+        inset=args.inset, min_confidence=args.min_confidence,
+    )
 
     manifest_path = Path(args.out)
     transcript_path = manifest_path.with_name(manifest_path.stem + ".transcript.json")
