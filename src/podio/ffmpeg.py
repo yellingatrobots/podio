@@ -1,7 +1,8 @@
 """Building ffmpeg command lines and reading what ffmpeg says back.
 
-Three passes per take. The middle one is the only expensive one: ebur128 meters
-while passing audio through, so the chain runs once rather than twice.
+Cleaning is an ffprobe for the take's rate, then three passes. The middle pass
+is the only expensive one: ebur128 meters while passing audio through, so the
+chain runs once rather than twice.
 """
 
 import re
