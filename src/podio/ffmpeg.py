@@ -29,6 +29,9 @@ SILENCE_LIMIT_DB = -100.0
 INTEGRATED = re.compile(r"^\s+I:\s*(-?[\d.]+) LUFS", re.MULTILINE)
 TRUE_PEAK = re.compile(r"^\s+Peak:\s*(-?[\d.]+) dBFS", re.MULTILINE)
 RANGE = re.compile(r"^(\d+(?::\d+){0,2}(?:\.\d+)?)\+(\d+(?:\.\d+)?)$")
+#: Containers that hold PCM, so a finished WAV can be muxed in untouched. MP4
+#: is not one of them in any player worth relying on.
+PCM_CONTAINERS = {".mov", ".mkv"}
 
 Audition = tuple[float, float] | None
 
@@ -177,13 +180,18 @@ def decode_pcm(source) -> tuple[int, array]:
 
 
 def mux_command(source: Path, audio: Path, destination: Path) -> list[str]:
-    """ffmpeg args to put `audio` over `source`'s video into `destination`."""
+    """ffmpeg args to put `audio` over `source`'s video into `destination`.
+
+    A container that carries PCM takes the WAV as it is; anywhere else the
+    audio has to be encoded, and the censored track loses a generation.
+    """
+    codec = "copy" if Path(destination).suffix.lower() in PCM_CONTAINERS else "aac"
     return [
         "ffmpeg", "-y",
         "-i", str(source),
         "-i", str(audio),
         "-map", "0:v?", "-map", "1:a",
-        "-c:v", "copy", "-c:a", "aac",
+        "-c:v", "copy", "-c:a", codec,
         "-shortest",
         str(destination),
     ]

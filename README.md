@@ -155,13 +155,18 @@ just censor test_audio/profanity.m4a out.wav    # one-shot, to just hear it
 For video, `mux` puts a finished track over the picture:
 
 ```sh
-podio mux episode.mp4 alex_censored.wav --out episode_censored.mp4
+podio mux episode.mp4 alex_censored.wav --out episode_censored.mov
+podio mux episode.mp4 alex_censored.wav      # -> episode_muxed.mov
 ```
 
-The video stream is copied through untouched — only the audio is replaced, and
-re-encoded to AAC. Without `--out` the result is named `episode_muxed.mp4`.
-(`podio bleep` does the same implicitly when its `--out` is a video file: it
-bleeps the source's audio and muxes it straight back over the picture.)
+Neither stream is re-encoded: the picture is copied through and the WAV is
+copied in as PCM, so the censored audio arrives in the NLE exactly as the
+pipeline rendered it. That is what the `.mov` is for — MP4 cannot carry PCM
+dependably, so a `.mp4` output re-encodes the audio to AAC and costs a
+generation. `.mov` and `.mkv` copy.
+
+(`podio bleep` muxes implicitly when its `--out` is a video file: it bleeps the
+source's own audio and puts it straight back over the picture, same rule.)
 
 Each `detect` run writes two files: the manifest (spans to bleep) and a sibling
 `*.transcript.json` (every word with its timing) — the lean edit list and the

@@ -24,6 +24,12 @@ def test_mux_command_muxes_censored_audio_over_source_video():
     ]
 
 
+def test_mux_into_a_mov_copies_the_audio_rather_than_encoding_it():
+    cmd = mux_command("in.mp4", "/tmp/censored.wav", "out.mov")
+
+    assert cmd[cmd.index("-c:a") + 1] == "copy"
+
+
 def test_bleep_replaces_samples_inside_span_and_leaves_the_rest():
     sr = 8000
     samples = [5] * sr  # 1s of a constant non-zero background

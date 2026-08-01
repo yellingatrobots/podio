@@ -179,10 +179,11 @@ def test_mux_puts_the_censored_audio_over_the_source_video(tmp_path):
     make_video(tmp_path / "episode.mp4")
     make_take(tmp_path / "alex_censored.wav")
 
-    out = tmp_path / "episode_censored.mp4"
+    out = tmp_path / "episode_censored.mov"
     assert main(["mux", str(tmp_path / "episode.mp4"),
                  str(tmp_path / "alex_censored.wav"), "--out", str(out)]) == 0
-    assert streams_of(out) == ["mpeg4,video", "aac,audio"]
+    # The picture is copied through and the wav lands intact, not re-encoded.
+    assert streams_of(out) == ["mpeg4,video", "pcm_s16le,audio"]
 
 
 def test_mux_names_its_output_after_the_source_when_not_told(tmp_path):
@@ -191,4 +192,4 @@ def test_mux_names_its_output_after_the_source_when_not_told(tmp_path):
 
     assert main(["mux", str(tmp_path / "episode.mp4"),
                  str(tmp_path / "alex_censored.wav")]) == 0
-    assert (tmp_path / "episode_muxed.mp4").exists()
+    assert (tmp_path / "episode_muxed.mov").exists()

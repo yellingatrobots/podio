@@ -42,10 +42,12 @@ def _cmd_bleep(args) -> int:
 
 
 def _cmd_mux(args) -> int:
-    """Put a finished audio track over a source video, keeping the video as-is."""
-    out = args.out or Path(args.video).with_name(
-        f"{Path(args.video).stem}_muxed{Path(args.video).suffix}"
-    )
+    """Put a finished audio track over a source video, keeping the video as-is.
+
+    The default is a QuickTime file whatever the source was, because that is
+    the container the WAV survives in — see ffmpeg.PCM_CONTAINERS.
+    """
+    out = args.out or Path(args.video).with_name(f"{Path(args.video).stem}_muxed.mov")
     try:
         ffmpeg.mux(args.video, args.audio, out)
     except RuntimeError as error:
@@ -256,7 +258,9 @@ def build_parser() -> argparse.ArgumentParser:
     p_mux.add_argument("video", help="the source video (its picture is copied through)")
     p_mux.add_argument("audio", help="the audio to put over it, e.g. a censored wav")
     p_mux.add_argument(
-        "--out", default=None, help="output file (default: SOURCE_muxed.EXT)"
+        "--out", default=None,
+        help="output file (default: SOURCE_muxed.mov; .mov/.mkv keep the wav "
+             "as it is, anything else re-encodes it to AAC)",
     )
     p_mux.set_defaults(func=_cmd_mux)
 
