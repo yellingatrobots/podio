@@ -7,10 +7,8 @@ so it never passes through the compressor or the gate.
 
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
 
-from . import ffmpeg
 from .bleep import render_file
 from .detect import transcribe_and_detect
 from .transcribe import Transcriber
@@ -56,15 +54,13 @@ def detect_into(
     min_confidence: float,
 ) -> tuple[Path, int]:
     """Transcribe `prepped`, write the manifest and transcript, return (path, spans)."""
-    with tempfile.TemporaryDirectory() as tmp:
-        normalized = Path(tmp) / "normalized.wav"
-        ffmpeg.normalize(prepped, normalized)
-        transcript, manifest = transcribe_and_detect(
-            str(normalized), transcriber, wordlist,
-            inset=inset, min_confidence=min_confidence,
-        )
-    # Report against the prepped take, not the temp copy the model read.
-    transcript.audio_path = manifest.audio_path = str(prepped)
+    # Handed the prepped take as it is: a transcriber owns the decode its model
+    # needs, and WhisperX already shells out to ffmpeg for mono 16 kHz. Doing it
+    # here as well only wrote a temp copy for WhisperX to convert a second time.
+    transcript, manifest = transcribe_and_detect(
+        str(prepped), transcriber, wordlist,
+        inset=inset, min_confidence=min_confidence,
+    )
 
     written = manifest_path(episode_dir, take_name)
     # Transcript last: is_hand_edited reads their order, and detection must

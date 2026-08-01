@@ -64,7 +64,11 @@ def _without_torchcodec_warning() -> Iterator[None]:
 
 
 class Transcriber(Protocol):
-    """Turns an audio file into timestamped words."""
+    """Turns an audio file into timestamped words.
+
+    Takes the file as it is and decodes whatever its model wants; callers hand
+    over the take, not a copy converted on the model's behalf.
+    """
 
     def transcribe(self, audio_path: str) -> List[Word]:
         ...
@@ -96,7 +100,9 @@ class WhisperXTranscriber:
         with _without_torchcodec_warning():
             import whisperx  # lazy: keeps torch out of the pure path
 
-            # WhisperX operates on a loaded waveform, not a path.
+            # WhisperX operates on a loaded waveform, not a path. load_audio
+            # shells out to ffmpeg for mono 16 kHz PCM, which is the decode this
+            # model wants — nothing upstream needs to prepare the take for it.
             audio = whisperx.load_audio(audio_path)
 
             model = whisperx.load_model(

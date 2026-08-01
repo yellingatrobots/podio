@@ -1,7 +1,8 @@
 """Transcribe a take and detect spans -> (transcript, manifest).
 
-Audio normalization lives in the CLI (which owns ffmpeg and temp files); by the
-time we get here, `audio_path` is whatever the injected transcriber should read.
+`audio_path` is the take itself. Whatever decoding a model needs — mono, a
+particular rate — belongs to the injected transcriber, which is the only thing
+here that knows what its model wants.
 """
 
 from __future__ import annotations
