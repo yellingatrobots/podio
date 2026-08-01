@@ -3,9 +3,10 @@
 Cleans and censors the raw per-speaker takes of a podcast episode into
 NLE-ready audio.
 
-In: raw mono WAVs, one per speaker. Out: denoised, leveled, gain-matched
-24-bit 48 kHz WAVs sitting at a common working level with headroom, and a
-reviewable manifest of the spans to bleep.
+In: raw mono WAVs, one per speaker, at whatever rate they were recorded at. Out:
+denoised, leveled, gain-matched 24-bit WAVs at a common working rate (48 kHz
+unless the episode says otherwise), sitting at a common working level with
+headroom, and a reviewable manifest of the spans to bleep.
 
 Syncing, mixing and final distribution loudness happen afterwards in the NLE.
 This tool deliberately stops short of a master —

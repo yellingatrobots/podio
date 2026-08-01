@@ -263,7 +263,12 @@ def build_parser() -> argparse.ArgumentParser:
     p_bleep = sub.add_parser("bleep", help="render censored audio from a manifest")
     p_bleep.add_argument("audio")
     p_bleep.add_argument("manifest")
-    p_bleep.add_argument("--out", default="censored.wav")
+    p_bleep.add_argument(
+        "--out", default="censored.wav",
+        help=f"output file (default: censored.wav). .wav and "
+             f"{'/'.join(sorted(ffmpeg.PCM_CONTAINERS))} keep 24-bit PCM; "
+             f"anything else has to encode the audio to AAC",
+    )
     p_bleep.add_argument("--freq", type=float, default=1000.0)
     p_bleep.set_defaults(func=_cmd_bleep)
 

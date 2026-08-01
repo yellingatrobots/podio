@@ -43,8 +43,9 @@ detect audio out="manifest.json" model="base.en" min_confidence="0" wordlist="co
     uv run podio detect "{{audio}}" --out "{{out}}" --wordlist "{{wordlist}}" --model {{model}} --min-confidence {{min_confidence}}
 
 # Render a censored copy from a manifest (1 kHz bleep tone).
-# Output format follows `out`'s extension: .wav writes audio directly; .mp4/.m4a
-# remux the bleeped audio over the source (video copied through untouched).
+# Output format follows `out`'s extension: .wav writes 24-bit audio directly;
+# anything else remuxes over the source, video copied through untouched. .mov
+# and .mkv carry the audio as 24-bit PCM; .mp4/.m4a can only encode it to AAC.
 bleep audio manifest out="censored.wav":
     uv run podio bleep "{{audio}}" "{{manifest}}" --out "{{out}}"
 

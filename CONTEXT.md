@@ -57,6 +57,13 @@ distribution loudness — it exists so takes sit at a common level with headroom
 for the NLE to mix and finalise.
 _Avoid_: target loudness, LUFS target, normalization target
 
+**Working Rate**:
+The sample rate the chain runs at, and so the rate every prepped and censored
+take is written at. A take arriving at another rate is resampled to it once,
+before the chain; a take already at it is passed through untouched. Distinct
+from the **working level**, which is about loudness rather than rate.
+_Avoid_: sample rate, target rate, project rate
+
 **Gain Match**:
 Bringing a take to the working level by a single constant gain, computed from
 the loudness measured at the end of that take's chain. Changes level only;
@@ -75,9 +82,9 @@ take — an edit or a dropout is silence, not room tone.
 _Avoid_: silence, background, noise level
 
 **Auto Value**:
-A stage parameter expressed relative to something measured or configured
-(`"floor+12"`, `"working-3"`) rather than as a fixed number. How a chain adapts
-to conditions without being re-tuned by hand.
+A stage parameter expressed relative to something measured (`"floor+12"`)
+rather than as a fixed number. How a chain adapts to conditions without being
+re-tuned by hand. The noise floor is the only reference there is.
 _Avoid_: dynamic, adaptive, computed
 
 **Wordlist**:
