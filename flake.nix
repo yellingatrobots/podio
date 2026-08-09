@@ -18,9 +18,15 @@
         # ffmpeg is the one that must be pinned: podio scrapes its
         # human-readable stderr for loudness and per-window levels, so a
         # formatting change upstream breaks parsing rather than the build.
+        #
+        # ffmpeg-full rather than ffmpeg, for one reason: it is the build that
+        # carries the OpenAL capture device, and OpenAL is the only way podio
+        # records. The obvious alternative on macOS, avfoundation, is in every
+        # build and loses 11-17% of the audio it captures — see the comment at
+        # the top of src/podio/capture.py.
         devShells.default = pkgs.mkShell {
           packages = [
-            pkgs.ffmpeg   # measurement, filtering, decode/mux
+            pkgs.ffmpeg-full   # measurement, filtering, decode/mux, capture
             pkgs.just     # task runner
             pkgs.uv       # owns the Python interpreter and every Python dep
           ];

@@ -33,15 +33,23 @@ just                   # list tasks
 just test              # run the tests
 ```
 
-`just install` symlinks `podio` into `~/.local/bin` (pass another directory as
-`just install ~/bin`). It is a symlink rather than a copy — the entry point's
-shebang already points into this repo's `.venv` and the install is editable, so
-there is one environment and edits here take effect immediately. After that,
-`podio` works from any episode directory.
+`just install` puts `podio` into `~/.local/bin` (pass another directory as
+`just install ~/bin`) as a two-line wrapper. It execs this repo's own entry
+point, so there is still one environment and edits here take effect immediately
+— but it also records the dev shell's `ffmpeg` in `$PODIO_FFMPEG` on the way
+past. That matters because an episode directory is outside the dev shell, and
+the `ffmpeg` found there is whatever the machine happens to have: podio parses
+ffmpeg's human-readable output, and records through an OpenAL capture device
+that the default builds leave out. **Re-run `just install` after
+`nix flake update`**, when the store path it recorded moves — a path that no
+longer resolves falls back to whatever is on `PATH` rather than failing, so
+cleaning still works and only recording complains.
 
 `ffmpeg` is pinned by the flake on purpose: podio reads loudness and per-window
 levels out of ffmpeg's human-readable stderr, so an upstream formatting change
-breaks parsing rather than the build.
+breaks parsing rather than the build. It is `ffmpeg-full` specifically, because
+that is the build carrying the OpenAL capture device that `podio bumper` records
+through — see [Why OpenAL, and not avfoundation](#why-openal-and-not-avfoundation).
 
 There is one environment and one interpreter. WhisperX is a hard dependency
 (~1.1 GB installed, mostly torch) because censoring is part of the pass, not an
@@ -234,6 +242,62 @@ sensitive region. If the working level ever moves, change `TONE_LEVEL_DB` in
 must never be censored. Matching is whole-word or whole-phrase, case- and
 punctuation-insensitive, and never substrings — so "class", "assassin" and
 "cockpit" are safe (the Scunthorpe problem).
+
+## Recording a bumper
+
+Intros, outros and transitions are recorded rather than cleaned, so podio can
+capture them directly and hand the NLE a file already at the working rate:
+
+```sh
+podio devices                        # what this machine can hear through
+podio bumper                         # -> bumper.wav, press q to stop
+podio bumper outro.wav --device 2    # a number from `podio devices`
+```
+
+A bumper is captured mono at 48 kHz and written 24-bit — the same shape as a
+prepped take, so it drops onto the timeline beside one without conversion. It
+does not go through the chain: there is nothing to gain-match it against, and a
+bumper is usually recorded in one deliberate go rather than salvaged.
+
+`podio bumper` is the only command that refuses to overwrite its output. Every
+other one can be run again from its inputs; a recording cannot, so replacing one
+takes `--force`.
+
+The numbers `podio devices` prints are podio's own, and are positions in that
+listing — they shift when a device connects, so a pair of headphones can
+renumber everything below it. `--device` also takes a device name straight
+through, which is the stable way to write it down:
+
+```sh
+podio bumper --device "RØDE PodMic USB"
+```
+
+With no `--device`, podio records from whichever microphone the system itself is
+using.
+
+### Why OpenAL, and not avfoundation
+
+podio records through ffmpeg's **OpenAL** capture device on every platform, and
+that is the reason the dev shell wants `ffmpeg-full` rather than `ffmpeg`.
+
+The obvious way to record on macOS — `ffmpeg -f avfoundation -i ":0"`, which is
+what every recipe online gives — silently **loses audio**. Its capture delegate
+holds one buffer slot and releases whatever is still in it when the next buffer
+arrives, so anything not collected in time is dropped
+(`libavdevice/avfoundation.m`, `didOutputSampleBuffer`). There is no queue and
+no option that adds one; `drop_late_frames` only reaches the video path.
+Measured here it lost 11–17% of every recording, in gaps of a few milliseconds
+tens of times a second. The samples either side get spliced together, and every
+splice is a click — inaudible in a silent room and obvious the moment anyone
+speaks, which makes it look like a broken microphone rather than a broken
+capture. OpenAL reads through a ring buffer and lost 0.06% of the same
+recordings.
+
+The one thing given up is depth: OpenAL captures at 16 bits, where avfoundation
+offered 32-bit float. A complete 16-bit recording beats a 24-bit one with holes
+in it, and 16 bits is ample for a spoken bumper. On Linux, `pulse` and `alsa`
+remain as fallbacks — they do not share the defect, and OpenAL may find nothing
+to talk to on a headless box.
 
 ## When a take needs more
 

@@ -4,7 +4,9 @@ Cleaning is three passes. The middle one is the only expensive one: ebur128
 meters while passing audio through, so the chain runs once rather than twice.
 """
 
+import os
 import re
+import shutil
 import subprocess
 import tempfile
 import wave
@@ -12,6 +14,9 @@ from array import array
 from pathlib import Path
 
 from .levels import db_to_linear
+
+#: Where `just install` records the ffmpeg the dev shell resolved to.
+FFMPEG_VARIABLE = "PODIO_FFMPEG"
 
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
@@ -37,6 +42,24 @@ RANGE = re.compile(r"^(\d+(?::\d+){0,2}(?:\.\d+)?)\+(\d+(?:\.\d+)?)$")
 PCM_CONTAINERS = {".mov", ".mkv"}
 
 Audition = tuple[float, float] | None
+
+
+def executable() -> str:
+    """The ffmpeg to run.
+
+    Which binary this is is not incidental. podio reads ffmpeg's human-readable
+    output, and recording needs a build carrying OpenAL — but the installed
+    entry point is run from episode directories, where the ambient ffmpeg is
+    whatever the machine happens to have rather than the one the flake pins. So
+    `just install` bakes the dev shell's own ffmpeg into $PODIO_FFMPEG.
+
+    A path that no longer resolves falls back to PATH rather than failing: the
+    store path moves whenever the flake is updated, and a stale install should
+    still clean an episode. What actually matters about the build is checked
+    where it is needed, so nothing dangerous gets through by falling back.
+    """
+    chosen = os.environ.get(FFMPEG_VARIABLE)
+    return (chosen and shutil.which(chosen)) or "ffmpeg"
 
 
 def parse_range(text: str) -> tuple[float, float]:
@@ -84,7 +107,7 @@ def parse_loudness(output: str) -> tuple[float, float]:
 
 
 def _base(source: Path, audition: Audition) -> list[str]:
-    cmd = ["ffmpeg", "-hide_banner", "-nostats", "-y"]
+    cmd = [executable(), "-hide_banner", "-nostats", "-y"]
     if audition:
         start, duration = audition
         cmd += ["-ss", f"{start:g}", "-t", f"{duration:g}"]
@@ -145,7 +168,7 @@ def apply_gain_command(
 def normalize_command(source: Path, destination: Path, rate: int) -> list[str]:
     """Decode `source` to mono PCM WAV at `rate` Hz — what the ASR model wants."""
     return [
-        "ffmpeg", "-y", "-i", str(source),
+        executable(), "-y", "-i", str(source),
         "-ac", "1", "-ar", str(rate),
         "-f", "wav", str(destination),
     ]
@@ -165,7 +188,7 @@ def decode_command(source: Path, destination: Path) -> list[str]:
     loss, and ffmpeg converts back down on the way out.
     """
     return [
-        "ffmpeg", "-y", "-i", str(source),
+        executable(), "-y", "-i", str(source),
         "-ac", "1", "-c:a", "pcm_s32le", "-f", "wav", str(destination),
     ]
 
@@ -184,7 +207,7 @@ def _splice_input(sample_rate: int) -> list[str]:
 def write_pcm_command(sample_rate: int, destination: Path) -> list[str]:
     """Read the splice on stdin, write it at 24-bit — the depth a take arrives at."""
     return [
-        "ffmpeg", "-y",
+        executable(), "-y",
         *_splice_input(sample_rate),
         "-c:a", "pcm_s24le",
         str(destination),
@@ -194,7 +217,7 @@ def write_pcm_command(sample_rate: int, destination: Path) -> list[str]:
 def mux_pcm_command(source: Path, sample_rate: int, destination: Path) -> list[str]:
     """Read the splice on stdin, put it over `source`'s video."""
     return [
-        "ffmpeg", "-y",
+        executable(), "-y",
         "-i", str(source),
         *_splice_input(sample_rate),
         "-map", "0:v?", "-map", "1:a",
@@ -255,7 +278,7 @@ def mux_command(source: Path, audio: Path, destination: Path) -> list[str]:
     """
     codec = "copy" if Path(destination).suffix.lower() in PCM_CONTAINERS else "aac"
     return [
-        "ffmpeg", "-y",
+        executable(), "-y",
         "-i", str(source),
         "-i", str(audio),
         "-map", "0:v?", "-map", "1:a",
@@ -291,6 +314,29 @@ def _text(raw: bytes) -> str:
 def run(command: list[str]) -> str:
     """Run ffmpeg, returning stderr — where its summaries are printed."""
     return _text(_execute(command).stderr)
+
+
+def probe(command: list[str]) -> str:
+    """Run ffmpeg and return everything it said, whatever it exited with.
+
+    Asking a device what it has is not a successful run: `-list_devices` prints
+    what it found and then fails to open the input it was never given, and
+    `-sources` prints its own error rather than returning one. The output is
+    the result here, so the exit status is not consulted — and which stream it
+    arrives on depends on which backend answered, so both are read.
+    """
+    result = subprocess.run(command, capture_output=True)
+    return _text(result.stdout) + _text(result.stderr)
+
+
+def attach(command: list[str]) -> int:
+    """Run ffmpeg on the terminal rather than around it.
+
+    Recording is the one thing podio does that a person watches and decides the
+    end of, so ffmpeg keeps the streams: its running counter is the feedback
+    that the microphone is live, and its stdin is what `q` stops it with.
+    """
+    return subprocess.run(command).returncode
 
 
 def run_stdout(command: list[str]) -> str:

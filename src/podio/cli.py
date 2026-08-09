@@ -12,7 +12,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from . import censor, ffmpeg
+from . import capture, censor, ffmpeg
 from .bleep import render_file
 from .clean import ROOT, clean_all, clean_episode, report
 from .config import scaffold
@@ -51,6 +51,66 @@ def _cmd_mux(args) -> int:
         ffmpeg.mux(args.video, args.audio, out)
     except RuntimeError as error:
         report(f"error: {error}")
+        return 1
+    print(f"wrote {out}")
+    return 0
+
+
+def _cmd_devices(args) -> int:
+    """List what this machine can record a bumper from.
+
+    The numbers are podio's own, not the backend's, so that the same number
+    means the same thing here as it does to `podio bumper --device`.
+    """
+    try:
+        backend, devices = capture.discover()
+    except ValueError as error:
+        report(f"error: {error}")
+        return 1
+
+    report(f"capture devices ({backend.format}):")
+    for device in devices:
+        print(f"{'*' if device.is_default else ' '} {device.index:>2}  {device.name}")
+    # The devices go to stdout so the list can be piped, the commentary to
+    # stderr so it is not. Two streams only stay in order if this one is pushed
+    # out before the next thing is said on the other.
+    sys.stdout.flush()
+    report("\npodio bumper records from the system's own microphone unless "
+           "--device names one of these")
+    return 0
+
+
+def _cmd_bumper(args) -> int:
+    """Record a bumper straight to a file, at the rate the pass works at.
+
+    The overwrite check is the one podio does nowhere else: every other output
+    can be rendered again from its inputs, and a recording cannot.
+    """
+    out = Path(args.out)
+    if out.exists() and not args.force:
+        report(f"error: {out} is already here; pass --force to record over it")
+        return 1
+
+    try:
+        backend, devices = capture.discover()
+        device = capture.resolve_device(args.device, devices, backend)
+    except ValueError as error:
+        report(f"error: {error}")
+        return 1
+
+    known = next(
+        (d.name for d in devices if d.spec == device),
+        device or "the system's own microphone",
+    )
+    report(f"recording {out} from {known} — press q to stop")
+    try:
+        ffmpeg.attach(capture.record_command(backend, device, out))
+    except KeyboardInterrupt:
+        # ffmpeg took the same interrupt and closed the file on its way out.
+        pass
+
+    if not out.exists():
+        report("error: nothing was recorded")
         return 1
     print(f"wrote {out}")
     return 0
@@ -236,6 +296,23 @@ def build_parser() -> argparse.ArgumentParser:
     p_clean = sub.add_parser("clean", help="clean an episode's takes -> prepped takes")
     add_clean_arguments(p_clean)
     p_clean.set_defaults(func=_cmd_clean)
+
+    p_devices = sub.add_parser(
+        "devices", help="list the microphones a bumper can be recorded from"
+    )
+    p_devices.set_defaults(func=_cmd_devices)
+
+    p_bumper = sub.add_parser("bumper", help="record a bumper from a microphone")
+    p_bumper.add_argument("out", nargs="?", default="bumper.wav")
+    p_bumper.add_argument(
+        "--device",
+        help="a number from 'podio devices', or a device name to pass straight "
+             "to ffmpeg (default: the system's own choice, or device 0)",
+    )
+    p_bumper.add_argument(
+        "--force", action="store_true", help="record over an existing file"
+    )
+    p_bumper.set_defaults(func=_cmd_bumper)
 
     p_norm = sub.add_parser("normalize", help="decode audio to 16kHz mono wav")
     p_norm.add_argument("audio")

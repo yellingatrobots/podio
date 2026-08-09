@@ -3,13 +3,44 @@ from pathlib import Path
 import pytest
 
 from podio.ffmpeg import (
+    FFMPEG_VARIABLE,
     analyse_command,
     apply_gain_command,
+    executable,
     parse_loudness,
     parse_noise_floor,
     parse_range,
     render_command,
 )
+
+
+def test_executable_is_whatever_is_on_the_path_by_default():
+    assert executable() == "ffmpeg"
+
+
+def test_executable_prefers_the_one_just_install_baked_in(tmp_path, monkeypatch):
+    """The installed entry point runs from episode directories, where the
+    ambient ffmpeg is whatever the machine has rather than the pinned one."""
+    baked = tmp_path / "ffmpeg"
+    baked.write_text("#!/bin/sh\n")
+    baked.chmod(0o755)
+    monkeypatch.setenv(FFMPEG_VARIABLE, str(baked))
+    assert executable() == str(baked)
+
+
+def test_executable_falls_back_when_the_baked_path_has_gone(tmp_path, monkeypatch):
+    """A nix store path moves when the flake is updated, and a stale install
+    should still be able to clean an episode."""
+    monkeypatch.setenv(FFMPEG_VARIABLE, str(tmp_path / "vanished" / "ffmpeg"))
+    assert executable() == "ffmpeg"
+
+
+def test_commands_run_the_resolved_executable(tmp_path, monkeypatch):
+    baked = tmp_path / "ffmpeg"
+    baked.write_text("#!/bin/sh\n")
+    baked.chmod(0o755)
+    monkeypatch.setenv(FFMPEG_VARIABLE, str(baked))
+    assert analyse_command(Path("ian.wav"), audition=None)[0] == str(baked)
 
 def windows(*levels: str) -> str:
     return "".join(

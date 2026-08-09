@@ -17,6 +17,21 @@ episode are independently recorded and may differ in level, noise floor, and
 duration.
 _Avoid_: track, file, source, speaker
 
+**Bumper**:
+A short piece of audio recorded straight to disk for an episode — an intro, an
+outro, a transition. Deliberately not a take: podio captures it from a
+microphone rather than cleaning a recording someone else made, and it never goes
+through the chain, because there is nothing to gain-match it against. Written at
+the working rate so it sits beside a prepped take on the timeline unconverted.
+_Avoid_: sting, ident, jingle, clip, intro
+
+**Capture Device**:
+A microphone, as ffmpeg addresses it — always through OpenAL, on every platform,
+because it is the one capture path that does not drop buffers. Identified by
+name; the numbers `podio devices` prints are positions in a listing that changes
+as devices come and go, so a name is what can be written down.
+_Avoid_: input, source, mic, interface, channel
+
 **Rig**:
 A speaker's stable recording setup — the microphone and its consistent tonal
 consequences. Belongs to the speaker across episodes, and is deliberately
