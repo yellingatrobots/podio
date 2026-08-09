@@ -111,6 +111,25 @@ def report(message: str):
     print(message, file=sys.stderr)
 
 
+def select_takes(
+    takes: list[config_module.Take], wanted: list[str], config: Path
+) -> list[config_module.Take]:
+    """The takes named on the command line, or all of them if none were named.
+
+    A name that matches nothing is an error: it is almost always a filename
+    where a take name belongs, so the message says which names there are.
+    """
+    if not wanted:
+        return takes
+    chosen = [t for t in takes if t.name in wanted]
+    if not chosen:
+        raise ValueError(
+            f"no take named {', '.join(wanted)} in {config} "
+            f"(takes are: {', '.join(t.name for t in takes)})"
+        )
+    return chosen
+
+
 def clean_all(args) -> tuple[config_module.Episode, list[Result]]:
     """Clean every requested take and record what was measured.
 
@@ -122,9 +141,7 @@ def clean_all(args) -> tuple[config_module.Episode, list[Result]]:
 
     episode = config_module.load_episode(args.config, args.rigs)
     audition = ffmpeg.parse_range(args.audition) if args.audition else None
-    takes = [t for t in episode.takes if not args.takes or t.name in args.takes]
-    if not takes:
-        raise ValueError(f"no take named {', '.join(args.takes)} in {args.config}")
+    takes = select_takes(episode.takes, args.takes, args.config)
 
     with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
         results = [
