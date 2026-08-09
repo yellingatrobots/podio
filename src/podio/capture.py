@@ -15,8 +15,8 @@ milliseconds tens of times a second. The samples either side get spliced
 together, and each splice is a click — audible only once there is signal, which
 is what makes it look like a microphone fault rather than a capture bug.
 
-OpenAL reads through a ring buffer instead, and measured 0.02% over the same
-recordings. It also names its devices rather than numbering them, and names are
+OpenAL reads through a ring buffer instead, and measured under 0.1% over the
+same recordings. It also names its devices rather than numbering them, and names are
 what survive a device being plugged in — an index is a position in a list that
 changes when a pair of headphones connects.
 

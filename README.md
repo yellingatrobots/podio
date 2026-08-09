@@ -290,7 +290,7 @@ Measured here it lost 11–17% of every recording, in gaps of a few milliseconds
 tens of times a second. The samples either side get spliced together, and every
 splice is a click — inaudible in a silent room and obvious the moment anyone
 speaks, which makes it look like a broken microphone rather than a broken
-capture. OpenAL reads through a ring buffer and lost 0.06% of the same
+capture. OpenAL reads through a ring buffer and lost under 0.1% of the same
 recordings.
 
 The one thing given up is depth: OpenAL captures at 16 bits, where avfoundation
