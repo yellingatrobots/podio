@@ -234,9 +234,45 @@ def _cmd_run(args) -> int:
     return 0
 
 
+#: What the whole pass does, and which command covers which part of it. Shown
+#: under `podio --help`; each command repeats its own segment in more detail.
+OVERVIEW = """\
+the pass:
+
+  takes ──▶ clean ─────────────────────────▶ prepped takes
+                 └─▶ detect ──▶ manifests
+                                └─▶ bleep ─▶ censored takes ──▶ NLE
+
+  podio run       all of it, take by take
+  podio clean     the first segment only — nothing is transcribed
+  podio detect    one file  ──▶ one manifest (and its transcript)
+  podio bleep     one manifest ──▶ one censored file
+
+around it: 'devices' and 'bumper' record intros and outros, 'mux' puts a
+finished track over a video, 'normalize' decodes anything to 16 kHz mono.
+"""
+
+
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="podio", description=__doc__)
+    parser = argparse.ArgumentParser(
+        prog="podio",
+        description="Clean and censor the raw per-speaker takes of an episode.",
+        epilog=OVERVIEW,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    def command(name: str, summary: str, chain: str):
+        """Add a subcommand described by the chain of steps it runs."""
+        # Blank lines go, indentation stays: a block that opens with its
+        # diagram is indented, and that indent is part of the diagram.
+        body = textwrap.dedent(chain).strip("\n")
+        return sub.add_parser(
+            name,
+            help=summary,
+            description=f"{summary}\n\n{body}",
+            formatter_class=argparse.RawDescriptionHelpFormatter,
+        )
 
     def add_clean_arguments(p):
         p.add_argument("takes", nargs="*", help="only these takes (default: all)")
@@ -276,8 +312,25 @@ def build_parser() -> argparse.ArgumentParser:
         p.add_argument("--device", default="cpu")
         p.add_argument("--language", default="en")
 
-    p_run = sub.add_parser(
-        "run", help="clean then censor an episode — the whole pass"
+    p_run = command(
+        "run", "clean then censor an episode — the whole pass",
+        """
+        For every take in audio.toml:
+
+          take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
+               ──▶ NAME_prepped.wav
+               ──▶ transcribe (WhisperX) ──▶ match the wordlist
+               ──▶ NAME.manifest.json + NAME.transcript.json
+               ──▶ splice the tone over each span ──▶ NAME_censored.wav
+
+        Then audio.analysis.toml, recording what was measured.
+
+        Where it stops early: --dry-run after measuring, --range after the
+        chain (an audition is a slice, so its timings are not the take's),
+        --review after the manifests, leaving 'podio bleep' to render them.
+        A manifest edited by hand since detection wrote it stops the run
+        rather than being overwritten; --redetect discards those edits.
+        """,
     )
     add_clean_arguments(p_run)
     add_detect_arguments(p_run, wordlist_default=None)
@@ -293,16 +346,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.set_defaults(func=_cmd_run)
 
-    p_clean = sub.add_parser("clean", help="clean an episode's takes -> prepped takes")
+    p_clean = command(
+        "clean", "clean an episode's takes -> prepped takes",
+        """
+        For every take in audio.toml:
+
+          take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
+               ──▶ NAME_prepped.wav
+
+        Then audio.analysis.toml, recording what was measured.
+
+        The first segment of 'podio run' on its own: nothing is transcribed
+        and nothing is censored. Prepped takes are what 'podio detect' and
+        'podio bleep' expect to be handed afterwards.
+        """,
+    )
     add_clean_arguments(p_clean)
     p_clean.set_defaults(func=_cmd_clean)
 
-    p_devices = sub.add_parser(
-        "devices", help="list the microphones a bumper can be recorded from"
+    p_devices = command(
+        "devices", "list the microphones a bumper can be recorded from",
+        """
+        Records nothing. Numbers this machine's capture devices so that
+        'podio bumper --device N' can name one of them.
+        """,
     )
     p_devices.set_defaults(func=_cmd_devices)
 
-    p_bumper = sub.add_parser("bumper", help="record a bumper from a microphone")
+    p_bumper = command(
+        "bumper", "record a bumper from a microphone",
+        """
+          microphone ──▶ ffmpeg capture ──▶ mono 48 kHz 24-bit wav
+
+        No chain and no gain match: a bumper is recorded deliberately in one
+        go, and there is nothing to match it against. It comes out the same
+        shape as a prepped take, so it drops onto the timeline beside one.
+        Press q to stop. An existing file is kept unless --force.
+        """,
+    )
     p_bumper.add_argument("out", nargs="?", default="bumper.wav")
     p_bumper.add_argument(
         "--device",
@@ -314,19 +395,44 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_bumper.set_defaults(func=_cmd_bumper)
 
-    p_norm = sub.add_parser("normalize", help="decode audio to 16kHz mono wav")
+    p_norm = command(
+        "normalize", "decode audio to 16kHz mono wav",
+        """
+          audio ──▶ ffmpeg decode ──▶ 16 kHz mono wav
+
+        Stands outside the pass. Detection hands audio to WhisperX undecoded,
+        so nothing here needs this; it is for looking at a file by hand.
+        """,
+    )
     p_norm.add_argument("audio")
     p_norm.add_argument("--out", default="normalized.wav")
     p_norm.set_defaults(func=_cmd_normalize)
 
-    p_man = sub.add_parser("detect", help="detect profanity -> censor manifest JSON")
+    p_man = command(
+        "detect", "detect profanity -> censor manifest JSON",
+        """
+          audio ──▶ transcribe (WhisperX) ──▶ match the wordlist
+                ──▶ OUT.json (the spans to bleep)
+                ──▶ OUT.transcript.json (every word, with its timing)
+
+        Renders no audio: review the manifest, then 'podio bleep' to splice
+        the tone over the spans it lists. 'podio run' does this step for a
+        whole episode, against the prepped takes.
+        """,
+    )
     p_man.add_argument("audio")
     p_man.add_argument("--out", default="manifest.json")
     add_detect_arguments(p_man, wordlist_default=WORDLIST)
     p_man.set_defaults(func=_cmd_detect)
 
-    p_mux = sub.add_parser(
-        "mux", help="replace a video's audio with a finished track"
+    p_mux = command(
+        "mux", "replace a video's audio with a finished track",
+        """
+          video + audio ──▶ remux, picture copied through ──▶ SOURCE_muxed.mov
+
+        After the pass, not part of it: the picture is never touched and the
+        audio is never mixed. Syncing and mixing happen in the NLE.
+        """,
     )
     p_mux.add_argument("video", help="the source video (its picture is copied through)")
     p_mux.add_argument("audio", help="the audio to put over it, e.g. a censored wav")
@@ -337,7 +443,16 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_mux.set_defaults(func=_cmd_mux)
 
-    p_bleep = sub.add_parser("bleep", help="render censored audio from a manifest")
+    p_bleep = command(
+        "bleep", "render censored audio from a manifest",
+        """
+          audio + manifest ──▶ splice the tone over each span ──▶ censored wav
+
+        The last step of 'podio run', on its own — this is how a manifest
+        that was edited by hand gets rendered. Nothing is transcribed and no
+        spans are detected: what the manifest lists is what gets bleeped.
+        """,
+    )
     p_bleep.add_argument("audio")
     p_bleep.add_argument("manifest")
     p_bleep.add_argument(
