@@ -12,9 +12,12 @@ allowlist = ["class", "assassin", "cockpit", "shiitake"]
 terms = [
   "fuck",
   "fucking",
+  "fucked",
   "fucker",
   "motherfucker",
+  "motherfucked",
   "shit",
+  "shitting",
   "cunt",
   "cocksucker",
   "asshole",
