@@ -14,15 +14,18 @@ from pathlib import Path
 
 from . import capture, censor, ffmpeg
 from .bleep import render_file
-from .clean import ROOT, clean_all, clean_episode, report
+from .clean import clean_all, clean_episode, report
 from .config import scaffold
 from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
-#: The wordlist shipped with the tool, used unless an episode names its own.
-#: An absolute path, because podio is run from the episode directory.
-WORDLIST = ROOT / "config" / "wordlist.toml"
+#: Defaults shipped with the tool, used unless an episode names its own.
+#: Package data, not repo paths: podio is run from the episode directory, and
+#: once installed there is no checkout above it.
+DATA = Path(__file__).resolve().parent / "data"
+WORDLIST = DATA / "wordlist.toml"
+RIGS = DATA / "rigs"
 
 
 def _cmd_normalize(args) -> int:
@@ -277,7 +280,7 @@ def build_parser() -> argparse.ArgumentParser:
     def add_clean_arguments(p):
         p.add_argument("takes", nargs="*", help="only these takes (default: all)")
         p.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
-        p.add_argument("--rigs", type=Path, default=ROOT / "rigs")
+        p.add_argument("--rigs", type=Path, default=RIGS)
         p.add_argument(
             "--range",
             dest="audition",

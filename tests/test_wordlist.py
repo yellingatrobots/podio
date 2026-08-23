@@ -1,5 +1,4 @@
-from pathlib import Path
-
+from podio import cli
 from podio.manifest import Word
 from podio.wordlist import WordList, find_spans
 
@@ -61,9 +60,7 @@ def test_confidence_is_the_minimum_across_matched_words():
 
 
 def test_the_shipped_wordlist_loads_and_respects_its_allowlist():
-    wordlist = WordList.from_file(
-        Path(__file__).resolve().parents[1] / "config" / "wordlist.toml"
-    )
+    wordlist = WordList.from_file(cli.WORDLIST)
 
     assert [s.term for s in find_spans(words("oh", "shit"), wordlist)] == ["shit"]
     assert find_spans(words("the", "class", "cockpit"), wordlist) == []

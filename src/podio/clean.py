@@ -16,10 +16,6 @@ from . import ffmpeg
 from .levels import GainMatch, Measured, gain_match
 from .stages import build_chain
 
-#: Repo root, from src/podio/clean.py. Where the tool-level defaults live
-#: (rigs, wordlist) — this tool is run in place, not installed.
-ROOT = Path(__file__).resolve().parents[2]
-
 
 @dataclass(frozen=True)
 class Result:
