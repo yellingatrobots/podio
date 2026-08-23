@@ -23,33 +23,38 @@ takes ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match ──�
 
 ## Environment
 
-Nix supplies the system binaries; `uv` supplies the Python.
+Nix supplies everything — ffmpeg, the interpreter, and the Python stack. The
+dev shell takes its dependencies from the package itself, so what you develop
+against and what you install cannot drift.
 
 ```sh
-nix develop            # ffmpeg, just, uv
-just sync              # build the environment from uv.lock
-just install           # put `podio` on your PATH
+nix develop            # ffmpeg, just, python + deps
 just                   # list tasks
 just test              # run the tests
 ```
 
-`just install` puts `podio` into `~/.local/bin` (pass another directory as
-`just install ~/bin`) as a two-line wrapper. It execs this repo's own entry
-point, so there is still one environment and edits here take effect immediately
-— but it also records the dev shell's `ffmpeg` in `$PODIO_FFMPEG` on the way
-past. That matters because an episode directory is outside the dev shell, and
-the `ffmpeg` found there is whatever the machine happens to have: podio parses
-ffmpeg's human-readable output, and records through an OpenAL capture device
-that the default builds leave out. **Re-run `just install` after
-`nix flake update`**, when the store path it recorded moves — a path that no
-longer resolves falls back to whatever is on `PATH` rather than failing, so
-cleaning still works and only recording complains.
+Inside the shell, `just` runs `python -m podio` against the working tree, so
+edits take effect immediately.
 
-`ffmpeg` is pinned by the flake on purpose: podio reads loudness and per-window
-levels out of ffmpeg's human-readable stderr, so an upstream formatting change
-breaks parsing rather than the build. It is `ffmpeg-full` specifically, because
-that is the build carrying the OpenAL capture device that `podio bumper` records
-through — see [Why OpenAL, and not avfoundation](#why-openal-and-not-avfoundation).
+**Installing.** `podio` is a package this flake exports, so a machine gets it
+declaratively — on mine, through a home-manager module in `~/etc`. For a
+one-off, `just install` runs `nix profile install .`. Either way `$PODIO_FFMPEG`
+is baked in at build time and never needs refreshing: an episode directory is
+outside the dev shell, and the `ffmpeg` found there is whatever the machine
+happens to have.
+
+That matters because podio reads loudness and per-window levels out of ffmpeg's
+human-readable stderr, so an upstream formatting change breaks parsing rather
+than the build. The version is not frozen — it follows whatever nixpkgs you
+build against — but `tests/test_end_to_end.py` runs against that exact binary
+during `nix build`, so drift fails the build instead of shipping. It is
+`ffmpeg-full` specifically, because that is the build carrying the OpenAL
+capture device that `podio bumper` records through — see
+[Why OpenAL, and not avfoundation](#why-openal-and-not-avfoundation).
+
+**Without nix.** `uv.lock` and `pyproject.toml` still describe a working
+environment: `uv sync`, then `PODIO="uv run podio" just <task>`. Nothing in CI
+exercises that path, so treat it as untested.
 
 There is one environment and one interpreter. WhisperX is a hard dependency
 (~1.1 GB installed, mostly torch) because censoring is part of the pass, not an
@@ -238,7 +243,8 @@ sensitive region. If the working level ever moves, change `TONE_LEVEL_DB` in
 
 ### Wordlist
 
-`config/wordlist.toml` holds the terms and an `allowlist` of whole words that
+`src/podio/data/wordlist.toml` ships with the tool and holds the terms, plus an
+`allowlist` of whole words that
 must never be censored. Matching is whole-word or whole-phrase, case- and
 punctuation-insensitive, and never substrings — so "class", "assassin" and
 "cockpit" are safe (the Scunthorpe problem).
@@ -335,7 +341,7 @@ doesn't.
 
 Two layers.
 
-A **rig** (`rigs/ian.toml`) is a speaker's stable setup and owns the full ordered
+A **rig** (`src/podio/data/rigs/ian.toml`) is a speaker's stable setup and owns the full ordered
 chain — every stage listed, with the condition-dependent ones switched off. Only
 stages the rig lists can be overridden, which is why they are all enumerated.
 
