@@ -36,12 +36,27 @@ just test              # run the tests
 Inside the shell, `just` runs `python -m podio` against the working tree, so
 edits take effect immediately.
 
+**Running it without installing.** The flake reference and the working
+directory are independent, which suits a tool that runs from an episode
+directory:
+
+```sh
+nix run github:yellingatrobots/podio -- devices   # no clone needed
+nix run /path/to/podio -- run                     # a local checkout
+```
+
+`--` separates nix's flags from podio's. Nothing is installed; the build lands
+in the store and is garbage-collected like anything else.
+
 **Installing.** `podio` is a package this flake exports, so a machine gets it
-declaratively — on mine, through a home-manager module in `~/etc`. For a
-one-off, `just install` runs `nix profile install .`. Either way `$PODIO_FFMPEG`
-is baked in at build time and never needs refreshing: an episode directory is
-outside the dev shell, and the `ffmpeg` found there is whatever the machine
-happens to have.
+declaratively — on mine, through a home-manager module in `~/etc`. On a machine
+that has no such config, `just install` runs `nix profile install .`, which is
+imperative and survives rebuilds: don't use it where the home-manager module
+already provides podio, or the profile copy shadows it on `PATH`.
+
+Either way `$PODIO_FFMPEG` is baked in at build time and never needs
+refreshing: an episode directory is outside the dev shell, and the `ffmpeg`
+found there is whatever the machine happens to have.
 
 That matters because podio reads loudness and per-window levels out of ffmpeg's
 human-readable stderr, so an upstream formatting change breaks parsing rather

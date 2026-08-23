@@ -12,8 +12,10 @@ podio := env_var_or_default("PODIO", "python -m podio")
 default:
     @just --list
 
-# Put `podio` on your PATH. Installed by nix now, from the home-manager
-# module in ~/etc — this builds it ad hoc for a machine without that.
+# Put `podio` on your PATH imperatively, for a machine with no nix config of
+# its own. Personal machines get it from the home-manager module in ~/etc; a
+# profile copy would shadow that one. To just try it, no install needed:
+#   nix run github:yellingatrobots/podio -- devices
 install:
     nix profile install .
 
