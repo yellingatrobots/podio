@@ -14,10 +14,19 @@
           overlays = [ optunaFix ];
         };
 
-        # whisperx pulls optuna in through pyannote-pipeline, and optuna 4.9.0
-        # fails three of its own tests: two assert on logging handlers that
-        # pytest's live-logging installs, one on a visualization warning count.
-        # Neither touches anything podio calls.
+        # whisperx pulls optuna in through pyannote-pipeline, and optuna fails
+        # tests of its own that nothing podio calls ever reaches.
+        #
+        # The first three: two assert on logging handlers pytest's live-logging
+        # installs, one on a visualization warning count.
+        #
+        # The rest are every test that renders a figure. Those export through
+        # kaleido 0.2.1, a prebuilt wheel wrapping a vendored Chromium whose
+        # PT_LOAD segments are 4 KiB-aligned, so it segfaults at exec on a
+        # 16 KiB-page kernel — Asahi here, macOS for the same reason. nixpkgs
+        # disables exactly this list but guards it with isDarwin, which tests
+        # the architecture instead of the page size, so Asahi runs them and 122
+        # parametrizations fail.
         optunaFix = final: prev: {
           pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
             (pyfinal: pyprev: {
@@ -26,6 +35,21 @@
                   "test_default_handler"
                   "test_propagation"
                   "test_filter_inf_trials_message"
+
+                  "test_edf_plot_no_trials"
+                  "test_edf_plot_no_trials_studies"
+                  "test_get_optimization_history_plot"
+                  "test_get_timeline_plot"
+                  "test_plot_contour"
+                  "test_plot_edf_with_multiple_studies"
+                  "test_plot_edf_with_target"
+                  "test_plot_edf_with_target_name"
+                  "test_plot_intermediate_values"
+                  "test_plot_parallel_coordinate"
+                  "test_plot_param_importances"
+                  "test_plot_rank"
+                  "test_plot_slice"
+                  "test_plot_terminator_improvement"
                 ];
               });
             })
