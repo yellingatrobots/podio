@@ -63,7 +63,7 @@ class Manifest:
 @dataclass
 class Transcript:
     """The full ASR word list for a file — the auditable record behind a
-    manifest. Written as a sibling `*.transcript.json` so the manifest stays a
+    manifest. Written as a sibling `*_transcript.json` so the manifest stays a
     lean edit-list while every run remains reviewable.
     """
 

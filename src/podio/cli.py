@@ -12,9 +12,9 @@ import sys
 import textwrap
 from pathlib import Path
 
-from . import capture, censor, ffmpeg
+from . import capture, censor, config, ffmpeg
 from .bleep import render_file
-from .clean import clean_all, clean_episode, report
+from .clean import Result, clean_all, clean_episode, report, select_takes
 from .config import scaffold
 from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
@@ -133,7 +133,8 @@ def _cmd_detect(args) -> int:
     )
 
     manifest_path = Path(args.out)
-    transcript_path = manifest_path.with_name(manifest_path.stem + ".transcript.json")
+    take_name = manifest_path.stem.removesuffix("_manifest")
+    transcript_path = manifest_path.with_name(f"{take_name}_transcript.json")
     manifest_path.write_text(manifest.to_json())
     transcript_path.write_text(transcript.to_json())
 
@@ -173,42 +174,41 @@ def _cmd_clean(args) -> int:
     return clean_episode(args)
 
 
-def _cmd_run(args) -> int:
-    """Clean every take, then censor the ones that asked for it."""
+def _run_episode(args, output_dir: Path) -> tuple[int, list[Result]]:
+    """Clean and censor the selected takes into `output_dir`."""
     _offer_stub(args)
     try:
-        episode, results = clean_all(args)
+        _, results = clean_all(args, output_dir)
     except (ValueError, RuntimeError) as error:
         report(f"error: {error}")
-        return 1
+        return 1, []
 
     if args.dry_run:
-        return 0
+        return 0, results
     if args.audition:
         # An audition is a slice, so its manifest would be timed against the
         # slice rather than the take. Auditioning checks the chain, not the words.
         report("       audition: chain only, nothing censored")
-        return 0
+        return 0, results
 
     wanted = [r for r in results if r.take.censor.enabled]
     if not wanted:
         report("       censoring is off for every take")
-        return 0
+        return 0, results
 
-    episode_dir = args.config.parent
     for result in wanted:
         name = result.take.name
-        manifest = censor.manifest_path(episode_dir, name)
-        transcript = censor.transcript_path(episode_dir, name)
+        manifest = censor.manifest_path(output_dir, name)
+        transcript = censor.transcript_path(output_dir, name)
 
         if censor.is_hand_edited(manifest, transcript) and not args.redetect:
             report(
                 f"{name:6} STOP  {manifest.name} has been edited since detection "
                 f"wrote it. Re-running would discard those edits. Render them with "
-                f"'podio bleep {result.output.name} {manifest.name}', or pass "
+                f"'podio bleep {result.output} {manifest}', or pass "
                 f"--redetect to throw them away and detect again."
             )
-            return 1
+            return 1, []
 
         try:
             # An explicit flag wins, then the episode's choice, then the default.
@@ -219,21 +219,67 @@ def _cmd_run(args) -> int:
                 model_size=args.model, device=args.device, language=args.language
             )
             manifest, spans = censor.detect_into(
-                result.output, episode_dir, name, wordlist, transcriber,
+                result.output, output_dir, name, wordlist, transcriber,
                 inset=args.inset, min_confidence=args.min_confidence,
             )
             report(f"{name:6} detected {spans} span(s) -> {manifest.name}")
 
             if args.review:
                 continue
-            out = censor.splice(result.output, manifest, episode_dir, name)
+            out = censor.splice(result.output, manifest, output_dir, name)
             report(f"{name:6} wrote {out.name}")
         except (ValueError, RuntimeError) as error:
             report(f"error: {error}")
-            return 1
+            return 1, []
 
     if args.review:
         report("       review the manifests, then 'podio bleep' to render")
+    return 0, results
+
+
+def _cmd_run(args) -> int:
+    """Clean every take, then censor the ones that asked for it."""
+    status, _ = _run_episode(args, args.config.parent)
+    return status
+
+
+def _cmd_finish(args) -> int:
+    """Clean and censor an episode, then mux each take's matching video."""
+    _offer_stub(args)
+    try:
+        episode = config.load_episode(args.config, args.rigs)
+        takes = select_takes(episode.takes, args.takes, args.config)
+        videos = {
+            take.name: args.config.parent / f"{take.name}.mp4" for take in takes
+        }
+        missing = [path for path in videos.values() if not path.exists()]
+        if missing:
+            raise ValueError(f"no matching video at {missing[0]}")
+    except ValueError as error:
+        report(f"error: {error}")
+        return 1
+
+    output_dir = args.artifacts
+    if not output_dir.is_absolute():
+        output_dir = args.config.parent / output_dir
+    status, results = _run_episode(args, output_dir)
+    if status:
+        return status
+
+    try:
+        for result in results:
+            name = result.take.name
+            audio = (
+                censor.censored_path(output_dir, name)
+                if result.take.censor.enabled
+                else result.output
+            )
+            out = args.config.parent / f"{name}_muxed.mov"
+            ffmpeg.mux(videos[name], audio, out)
+            report(f"{name:6} wrote {out.name}")
+    except RuntimeError as error:
+        report(f"error: {error}")
+        return 1
     return 0
 
 
@@ -247,6 +293,7 @@ the pass:
                                 └─▶ bleep ─▶ censored takes ──▶ NLE
 
   podio run       all of it, take by take
+  podio finish    all of it, then mux matching videos
   podio clean     the first segment only — nothing is transcribed
   podio detect    one file  ──▶ one manifest (and its transcript)
   podio bleep     one manifest ──▶ one censored file
@@ -277,26 +324,32 @@ def build_parser() -> argparse.ArgumentParser:
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
-    def add_clean_arguments(p):
+    def add_clean_arguments(p, *, partial=True):
         p.add_argument("takes", nargs="*", help="only these takes (default: all)")
         p.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
         p.add_argument("--rigs", type=Path, default=RIGS)
-        p.add_argument(
-            "--range",
-            dest="audition",
-            help="render only this slice, as START+SECONDS (e.g. 21:30+45)",
-        )
+        if partial:
+            p.add_argument(
+                "--range",
+                dest="audition",
+                help="render only this slice, as START+SECONDS (e.g. 21:30+45)",
+            )
+        else:
+            p.set_defaults(audition=None)
         p.add_argument(
             "--models",
             type=Path,
             default=Path(os.environ.get("RNNOISE_MODELS", "")),
             help="directory of .rnnn files (default: $RNNOISE_MODELS)",
         )
-        p.add_argument(
-            "--dry-run",
-            action="store_true",
-            help="measure and print the resolved chain, but render nothing",
-        )
+        if partial:
+            p.add_argument(
+                "--dry-run",
+                action="store_true",
+                help="measure and print the resolved chain, but render nothing",
+            )
+        else:
+            p.set_defaults(dry_run=False)
 
     def add_detect_arguments(p, *, wordlist_default):
         p.add_argument("--wordlist", default=wordlist_default)
@@ -323,10 +376,10 @@ def build_parser() -> argparse.ArgumentParser:
           take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
                ──▶ NAME_prepped.wav
                ──▶ transcribe (WhisperX) ──▶ match the wordlist
-               ──▶ NAME.manifest.json + NAME.transcript.json
+               ──▶ NAME_manifest.json + NAME_transcript.json
                ──▶ splice the tone over each span ──▶ NAME_censored.wav
 
-        Then audio.analysis.toml, recording what was measured.
+        Then audio_analysis.toml, recording what was measured.
 
         Where it stops early: --dry-run after measuring, --range after the
         chain (an audition is a slice, so its timings are not the take's),
@@ -349,6 +402,35 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_run.set_defaults(func=_cmd_run)
 
+    p_finish = command(
+        "finish", "clean, censor, and mux an episode for the NLE",
+        """
+        For every selected take in audio.toml:
+
+          NAME.wav ──▶ clean ──▶ censor ──▶ podio_artifacts/
+          NAME.mp4 + censored audio ──▶ NAME_muxed.mov
+
+        Each video is discovered by take name. Generated WAV, JSON, and TOML
+        files stay under podio_artifacts; the muxed MOVs land beside the raw
+        inputs. Censoring-disabled takes use their prepped audio.
+        """,
+    )
+    add_clean_arguments(p_finish, partial=False)
+    add_detect_arguments(p_finish, wordlist_default=None)
+    p_finish.add_argument(
+        "--artifacts",
+        type=Path,
+        default=Path("podio_artifacts"),
+        help="intermediate output directory, relative to the episode "
+             "(default: podio_artifacts)",
+    )
+    p_finish.add_argument(
+        "--redetect",
+        action="store_true",
+        help="re-detect even where a manifest has been edited by hand, losing those edits",
+    )
+    p_finish.set_defaults(func=_cmd_finish, review=False)
+
     p_clean = command(
         "clean", "clean an episode's takes -> prepped takes",
         """
@@ -357,7 +439,7 @@ def build_parser() -> argparse.ArgumentParser:
           take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
                ──▶ NAME_prepped.wav
 
-        Then audio.analysis.toml, recording what was measured.
+        Then audio_analysis.toml, recording what was measured.
 
         The first segment of 'podio run' on its own: nothing is transcribed
         and nothing is censored. Prepped takes are what 'podio detect' and
@@ -416,7 +498,7 @@ def build_parser() -> argparse.ArgumentParser:
         """
           audio ──▶ transcribe (WhisperX) ──▶ match the wordlist
                 ──▶ OUT.json (the spans to bleep)
-                ──▶ OUT.transcript.json (every word, with its timing)
+                ──▶ OUT_transcript.json (every word, with its timing)
 
         Renders no audio: review the manifest, then 'podio bleep' to splice
         the tone over the spans it lists. 'podio run' does this step for a

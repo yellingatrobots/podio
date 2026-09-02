@@ -16,11 +16,11 @@ from .wordlist import WordList
 
 
 def manifest_path(episode_dir: Path, take_name: str) -> Path:
-    return Path(episode_dir) / f"{take_name}.manifest.json"
+    return Path(episode_dir) / f"{take_name}_manifest.json"
 
 
 def transcript_path(episode_dir: Path, take_name: str) -> Path:
-    return Path(episode_dir) / f"{take_name}.transcript.json"
+    return Path(episode_dir) / f"{take_name}_transcript.json"
 
 
 def censored_path(episode_dir: Path, take_name: str) -> Path:
@@ -65,8 +65,8 @@ def detect_into(
     written = manifest_path(episode_dir, take_name)
     # Transcript last: is_hand_edited reads their order, and detection must
     # never leave behind a pair that looks hand-edited.
-    written.write_text(manifest.to_json())
-    transcript_path(episode_dir, take_name).write_text(transcript.to_json())
+    _ = written.write_text(manifest.to_json())
+    _ = transcript_path(episode_dir, take_name).write_text(transcript.to_json())
     return written, len(manifest.spans)
 
 

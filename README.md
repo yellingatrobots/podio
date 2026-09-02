@@ -78,7 +78,8 @@ default `base.en`) from Hugging Face; after that it runs offline.
 
 ## Cleaning an episode
 
-1. Put the raw WAVs in the episode directory (`ian.wav`, `josh.wav`).
+1. Put the raw WAVs and matching videos in the episode directory (`ian.wav`,
+   `ian.mp4`, `josh.wav`, `josh.mp4`). Video is only required by `finish`.
 2. Run `podio run`. With no `audio.toml` there it shows you one built from the
    takes it found and offers to write it — each `.wav` becomes a take pointed at
    the rig of the same name, and podio's own outputs are never mistaken for
@@ -129,7 +130,7 @@ podio run
 ```
 
 About 30 seconds of cleaning per two takes, plus detection, plus
-`audio.analysis.toml` recording what was measured.
+`audio_analysis.toml` recording what was measured.
 
 To clean without censoring:
 
@@ -143,6 +144,49 @@ podio clean --dry-run         # measure and resolve, render nothing
 `--range` writes `ian_audition.wav` instead, so auditioning never overwrites a
 finished render. Use it to check one moment — a laugh you think got chewed —
 without re-rendering 35 minutes.
+
+## Finishing for the NLE
+
+`podio finish` runs the full audio pass and then automatically pairs each take
+with `NAME.mp4`:
+
+```sh
+podio finish       # -> ian_muxed.mov, josh_muxed.mov
+podio finish ian   # only ian
+```
+
+Every selected video must exist before processing begins. The episode directory
+afterwards keeps the inputs, configuration, and final MOVs visible:
+
+```
+audio.toml
+ian.wav
+ian.mp4
+ian_muxed.mov
+josh.wav
+josh.mp4
+josh_muxed.mov
+podio_artifacts/
+```
+
+Generated intermediates use single underscores and stay under
+`podio_artifacts/`:
+
+```
+audio_analysis.toml
+ian_prepped.wav
+ian_censored.wav
+ian_manifest.json
+ian_transcript.json
+josh_prepped.wav
+josh_censored.wav
+josh_manifest.json
+josh_transcript.json
+```
+
+Use `--artifacts DIR` to change that directory. Relative paths are resolved
+from the episode directory. If censoring is disabled for a take, `finish` muxes
+its prepped audio instead.
 
 ## The whole pass
 
@@ -162,17 +206,17 @@ An episode directory afterwards:
 ian.wav                raw take
 ian_prepped.wav        cleaned, gain-matched, uncensored
 ian_censored.wav       ← import this one
-ian.manifest.json      the spans, reviewable and editable
-ian.transcript.json    every word heard, with timings
-audio.analysis.toml    what the run measured
+ian_manifest.json      the spans, reviewable and editable
+ian_transcript.json    every word heard, with timings
+audio_analysis.toml    what the run measured
 ```
 
 Detection listens to the prepped take, not the raw one — denoising and gating
 measurably help the ASR — and the tone goes on after gain match, so it never
 passes through the compressor or the gate, which would pump a constant sine.
 
-**Editing a manifest.** Edit `ian.manifest.json` and re-render it in about a
-second with `podio bleep ian_prepped.wav ian.manifest.json --out
+**Editing a manifest.** Edit `ian_manifest.json` and re-render it in about a
+second with `podio bleep ian_prepped.wav ian_manifest.json --out
 ian_censored.wav` — no ASR, no chain. A later `podio run` will *stop* rather than
 overwrite an edited manifest, because detection is reproducible and your
 judgement about a word it got wrong is not. `--redetect` overrides that and
@@ -188,8 +232,8 @@ The two halves are separate commands too, for a file that isn't part of an
 episode:
 
 ```sh
-podio detect ian.wav --out ian.manifest.json    # -> manifest + transcript
-podio bleep ian.wav ian.manifest.json --out ian_censored.wav
+podio detect ian.wav --out ian_manifest.json    # -> ian_transcript.json too
+podio bleep ian.wav ian_manifest.json --out ian_censored.wav
 just censor test_audio/profanity.m4a out.wav    # one-shot, to just hear it
 ```
 
@@ -210,7 +254,7 @@ generation. `.mov` and `.mkv` copy.
 source's own audio and puts it straight back over the picture, same rule.)
 
 Each `detect` run writes two files: the manifest (spans to bleep) and a sibling
-`*.transcript.json` (every word with its timing) — the lean edit list and the
+`*_transcript.json` (every word with its timing) — the lean edit list and the
 auditable record. When you suspect a word was missed, the transcript is what you
 grep.
 

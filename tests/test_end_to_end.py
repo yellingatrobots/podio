@@ -91,7 +91,7 @@ def test_the_prepped_take_is_24_bit_48k_mono(episode):
 
 def test_the_run_records_what_it_measured(episode):
     run_on(episode)
-    sidecar = tomllib.loads((episode / "audio.analysis.toml").read_text())
+    sidecar = tomllib.loads((episode / "audio_analysis.toml").read_text())
 
     assert sidecar["working_level_db"] == -24.0
     assert sidecar["peak_ceiling_db"] == -2.0
@@ -112,7 +112,7 @@ def test_an_audition_writes_a_separate_short_file(episode):
 def test_a_dry_run_measures_but_writes_nothing(episode):
     assert run_on(episode, "--dry-run") == 0
     assert not (episode / "alex_prepped.wav").exists()
-    assert not (episode / "audio.analysis.toml").exists()
+    assert not (episode / "audio_analysis.toml").exists()
 
 
 def full_pass(episode: Path, *extra: str) -> int:
@@ -127,29 +127,29 @@ def test_a_run_with_censoring_off_stops_after_the_prepped_take(episode):
     assert full_pass(episode) == 0
     assert (episode / "alex_prepped.wav").exists()
     assert not (episode / "alex_censored.wav").exists()
-    assert not (episode / "alex.manifest.json").exists()
+    assert not (episode / "alex_manifest.json").exists()
 
 
 def test_an_audition_is_never_censored(episode):
     """A slice's manifest would be timed against the slice, not the take."""
     assert full_pass(episode, "--range", "0+2") == 0
     assert (episode / "alex_audition.wav").exists()
-    assert not (episode / "alex.manifest.json").exists()
+    assert not (episode / "alex_manifest.json").exists()
 
 
 def test_a_run_refuses_to_discard_a_hand_edited_manifest(episode):
     edited = '{"spans": [{"start": 1.0, "end": 1.2}]}'
-    (episode / "alex.manifest.json").write_text(edited)
+    (episode / "alex_manifest.json").write_text(edited)
 
     assert full_pass(episode) == 1
-    assert (episode / "alex.manifest.json").read_text() == edited
+    assert (episode / "alex_manifest.json").read_text() == edited
     assert not (episode / "alex_censored.wav").exists()
 
 
 def test_a_dry_run_censors_nothing(episode):
     assert full_pass(episode, "--dry-run") == 0
     assert not (episode / "alex_prepped.wav").exists()
-    assert not (episode / "alex.manifest.json").exists()
+    assert not (episode / "alex_manifest.json").exists()
 
 
 def make_video(path: Path):
@@ -192,3 +192,39 @@ def test_mux_names_its_output_after_the_source_when_not_told(tmp_path):
     assert main(["mux", str(tmp_path / "episode.mp4"),
                  str(tmp_path / "alex_censored.wav")]) == 0
     assert (tmp_path / "episode_muxed.mov").exists()
+
+
+class EmptyTranscriber:
+    def __init__(self, **_kwargs):
+        pass
+
+    def transcribe(self, _audio_path):
+        return []
+
+
+def test_finish_requires_a_matching_video_before_processing(episode):
+    assert main([
+        "finish", "-c", str(episode / "audio.toml"),
+        "--rigs", str(episode / "rigs"),
+    ]) == 1
+    assert not (episode / "podio_artifacts").exists()
+
+
+def test_finish_keeps_only_the_muxed_take_in_the_episode_root(episode, monkeypatch):
+    make_video(episode / "alex.mp4")
+    monkeypatch.setattr("podio.cli.WhisperXTranscriber", EmptyTranscriber)
+
+    assert main([
+        "finish", "-c", str(episode / "audio.toml"),
+        "--rigs", str(episode / "rigs"),
+    ]) == 0
+
+    artifacts = episode / "podio_artifacts"
+    assert (episode / "alex_muxed.mov").exists()
+    assert (artifacts / "alex_prepped.wav").exists()
+    assert (artifacts / "alex_censored.wav").exists()
+    assert (artifacts / "alex_manifest.json").exists()
+    assert (artifacts / "alex_transcript.json").exists()
+    assert (artifacts / "audio_analysis.toml").exists()
+    assert not (episode / "alex_prepped.wav").exists()
+    assert not (episode / "alex_censored.wav").exists()

@@ -33,6 +33,7 @@ def process(
     audition: ffmpeg.Audition,
     workdir: Path,
     dry_run: bool,
+    output_dir: Path,
 ) -> Result:
     floor = ffmpeg.parse_noise_floor(
         ffmpeg.run_stdout(ffmpeg.analyse_command(take.source, audition))
@@ -40,7 +41,7 @@ def process(
     measured = Measured(floor_db=floor)
     chain = build_chain(take.chain, measured, models_dir)
     suffix = "_audition" if audition else "_prepped"
-    output = take.source.parent / f"{take.name}{suffix}.wav"
+    output = output_dir / f"{take.name}{suffix}.wav"
     report(f"{take.name:6} floor {floor:7.1f} dB  {ffmpeg.WORKING_RATE} Hz")
 
     if dry_run:
@@ -126,7 +127,9 @@ def select_takes(
     return chosen
 
 
-def clean_all(args) -> tuple[config_module.Episode, list[Result]]:
+def clean_all(
+    args, output_dir: Path | None = None
+) -> tuple[config_module.Episode, list[Result]]:
     """Clean every requested take and record what was measured.
 
     Raises ValueError or RuntimeError; the command wrappers turn those into an
@@ -138,15 +141,21 @@ def clean_all(args) -> tuple[config_module.Episode, list[Result]]:
     episode = config_module.load_episode(args.config, args.rigs)
     audition = ffmpeg.parse_range(args.audition) if args.audition else None
     takes = select_takes(episode.takes, args.takes, args.config)
+    if output_dir is None:
+        output_dir = args.config.parent
+    if not args.dry_run:
+        output_dir.mkdir(parents=True, exist_ok=True)
 
     with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
         results = [
-            process(t, episode, args.models, audition, Path(tmp), args.dry_run)
+            process(
+                t, episode, args.models, audition, Path(tmp), args.dry_run, output_dir
+            )
             for t in takes
         ]
 
     if not args.dry_run:
-        sidecar = args.config.parent / "audio.analysis.toml"
+        sidecar = output_dir / "audio_analysis.toml"
         write_sidecar(sidecar, episode, results)
         report(f"       wrote {sidecar.name}")
     return episode, results

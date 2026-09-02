@@ -8,6 +8,7 @@ from podio.censor import (
     manifest_path,
     transcript_path,
 )
+from podio.cli import main
 from podio.manifest import Word
 from podio.wordlist import WordList
 
@@ -15,8 +16,8 @@ WORDLIST = WordList.from_dict({"terms": ["damn"]})
 
 
 def test_artifacts_are_named_after_the_take(tmp_path):
-    assert manifest_path(tmp_path, "ian") == tmp_path / "ian.manifest.json"
-    assert transcript_path(tmp_path, "ian") == tmp_path / "ian.transcript.json"
+    assert manifest_path(tmp_path, "ian") == tmp_path / "ian_manifest.json"
+    assert transcript_path(tmp_path, "ian") == tmp_path / "ian_transcript.json"
     assert censored_path(tmp_path, "ian") == tmp_path / "ian_censored.wav"
 
 
@@ -43,6 +44,19 @@ def test_detection_hands_the_transcriber_the_take_itself(tmp_path):
     )
 
     assert transcriber.read == str(prepped)
+
+
+def test_detect_uses_matching_underscore_names(tmp_path, monkeypatch):
+    audio = tmp_path / "ian.wav"
+    audio.write_bytes(b"")
+    manifest = tmp_path / "ian_manifest.json"
+    monkeypatch.setattr(
+        "podio.cli.WhisperXTranscriber", lambda **_kwargs: RecordingTranscriber()
+    )
+
+    assert main(["detect", str(audio), "--out", str(manifest)]) == 0
+    assert manifest.exists()
+    assert (tmp_path / "ian_transcript.json").exists()
 
 
 def test_the_manifest_points_at_the_take_that_was_read(tmp_path):
