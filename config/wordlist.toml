@@ -10,6 +10,8 @@
 allowlist = ["class", "assassin", "cockpit", "shiitake"]
 
 terms = [
+  "dipshit",
+  "dipshits",
   "fuck",
   "fucking",
   "fucked",
@@ -17,6 +19,7 @@ terms = [
   "motherfucker",
   "motherfucked",
   "shit",
+  "shits",
   "shit's",
   "shitbird",
   "shitting",
