@@ -12,7 +12,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from . import capture, censor, config, ffmpeg
+from . import __version__, capture, censor, config, ffmpeg
 from .bleep import render_file
 from .clean import Result, clean_all, clean_episode, report, select_takes
 from .config import scaffold
@@ -309,6 +309,9 @@ def build_parser() -> argparse.ArgumentParser:
         description="Clean and censor the raw per-speaker takes of an episode.",
         epilog=OVERVIEW,
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--version", action="version", version=f"podio {__version__}"
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

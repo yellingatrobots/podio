@@ -1,6 +1,6 @@
 [project]
 name = "podio"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Clean and censor an episode's takes into NLE-ready audio"
 requires-python = ">=3.12"
 # whisperx is not optional: censoring is part of the pass, not an add-on.
@@ -20,6 +20,10 @@ dev = ["pytest"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+# One version, kept in the package where --version reads it.
+[tool.hatch.version]
+path = "src/podio/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/podio"]
