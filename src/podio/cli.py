@@ -311,198 +311,396 @@ def _cmd_finish(args) -> int:
     return 0
 
 
-#: What the whole pass does, and which command covers which part of it. Shown
-#: under `podio --help`; each command repeats its own segment in more detail.
+#: The top-level help. argparse lists subcommands flat and in no useful order,
+#: so the list is written out here — the pass in step order, then what stands
+#: outside it — and argparse's own is suppressed.
 OVERVIEW = """\
-the pass:
+Clean and censor the raw per-speaker takes of an episode, then master the
+NLE's mixdown.
 
-  takes ──▶ clean ─────────────────────────▶ prepped takes
-                 └─▶ detect ──▶ manifests
-                                └─▶ bleep ─▶ censored takes ──▶ NLE
-  NLE mixdown ──▶ master ──▶ mastered mp4 + feed mp3
+the pass, in order — run from the episode directory, takes from audio.toml:
 
-  podio run       all of it, take by take
-  podio finish    all of it, then mux matching videos
-  podio clean     the first segment only — nothing is transcribed
-  podio detect    one file  ──▶ one manifest (and its transcript)
-  podio bleep     one manifest ──▶ one censored file
-  podio master    the NLE's mixdown ──▶ delivery loudness
+  1  clean    each take ──▶ chain ──▶ gain match ──▶ NAME_prepped.wav
+  2  detect   prepped take ──▶ transcribe ──▶ wordlist ──▶ NAME_manifest.json
+  3  bleep    prepped take + manifest ──▶ tone over spans ──▶ NAME_censored.wav
+  4  mux      NAME.mp4 + censored take ──▶ NAME_muxed.mov
+              ··· sync, edit and mix in the NLE; export the mixdown ···
+  5  master   mixdown.mp4 ──▶ -16 LUFS / -1 dBTP ──▶ STEM.mp4 + STEM.mp3
 
-around it: 'devices' and 'bumper' record intros and outros, 'mux' puts a
-finished track over a video, 'normalize' decodes anything to 16 kHz mono.
+commands that run the pass:
+
+  podio run       steps 1-3, every take
+  podio finish    steps 1-4, every take
+  podio clean     step 1, every take
+  podio detect    step 2, one file
+  podio bleep     step 3, one file
+  podio mux       step 4, one file
+  podio master    step 5, the NLE's mixdown
+
+standalone, outside the pass:
+
+  podio devices     list the microphones a bumper can be recorded from
+  podio bumper      record an intro or outro straight to a 48 kHz wav
+  podio normalize   decode any audio to 16 kHz mono wav, to inspect it
+
+'podio COMMAND --help' shows a command's steps and options.
 """
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="podio",
-        description="Clean and censor the raw per-speaker takes of an episode.",
-        epilog=OVERVIEW,
+        # Spelled out because the command list is suppressed, and with it
+        # argparse's own mention of COMMAND.
+        usage="podio [-h] [--version] COMMAND ...",
+        description=OVERVIEW,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "--version", action="version", version=f"podio {__version__}"
     )
-    sub = parser.add_subparsers(dest="command", required=True)
+    sub = parser.add_subparsers(
+        dest="command", required=True, metavar="COMMAND", help=argparse.SUPPRESS
+    )
 
-    def command(name: str, summary: str, chain: str):
-        """Add a subcommand described by the chain of steps it runs."""
+    def command(name: str, description: str):
+        """Add a subcommand. Its description opens with where it sits in the
+        pass, which is also its one-line summary."""
         # Blank lines go, indentation stays: a block that opens with its
         # diagram is indented, and that indent is part of the diagram.
-        body = textwrap.dedent(chain).strip("\n")
+        body = textwrap.dedent(description).strip("\n")
         return sub.add_parser(
             name,
-            help=summary,
-            description=f"{summary}\n\n{body}",
+            description=body,
             formatter_class=argparse.RawDescriptionHelpFormatter,
         )
 
-    def add_clean_arguments(p, *, partial=True):
+    def add_episode_arguments(p):
+        """The takes and where the episode is; returns the group for more."""
         p.add_argument("takes", nargs="*", help="only these takes (default: all)")
-        p.add_argument("-c", "--config", type=Path, default=Path("audio.toml"))
-        p.add_argument("--rigs", type=Path, default=RIGS)
-        if partial:
-            p.add_argument(
-                "--range",
-                dest="audition",
-                help="render only this slice, as START+SECONDS (e.g. 21:30+45)",
-            )
-        else:
-            p.set_defaults(audition=None)
-        p.add_argument(
+        episode = p.add_argument_group("episode")
+        episode.add_argument(
+            "-c", "--config", type=Path, default=Path("audio.toml"),
+            help="the episode's config (default: audio.toml)",
+        )
+        episode.add_argument(
+            "--rigs", type=Path, default=RIGS,
+            help="directory of rig files (default: the rigs podio ships)",
+        )
+        return episode
+
+    def add_clean_arguments(p, *, partial=True):
+        clean = p.add_argument_group("step 1, clean")
+        clean.add_argument(
             "--models",
             type=Path,
             default=Path(os.environ.get("RNNOISE_MODELS", "")),
-            help="directory of .rnnn files (default: $RNNOISE_MODELS)",
+            help="directory of .rnnn files for rnnoise (default: $RNNOISE_MODELS)",
         )
         if partial:
-            p.add_argument(
+            clean.add_argument(
                 "--dry-run",
                 action="store_true",
-                help="measure and print the resolved chain, but render nothing",
+                help="measure and print each resolved chain, render nothing",
+            )
+            clean.add_argument(
+                "--range",
+                dest="audition",
+                metavar="START+SECONDS",
+                help="render only this slice (e.g. 21:30+45) to "
+                     "NAME_audition.wav, and stop",
             )
         else:
-            p.set_defaults(dry_run=False)
+            p.set_defaults(audition=None, dry_run=False)
 
-    def add_detect_arguments(p, *, wordlist_default):
-        p.add_argument("--wordlist", default=wordlist_default)
-        p.add_argument(
-            "--inset", type=float, default=0.03,
-            help="seconds to shrink each span edge inward (default 0.03)",
-        )
-        p.add_argument(
-            "--min-confidence", type=float, default=0.0,
-            help="drop detections below this ASR confidence (default 0: keep all)",
-        )
-        p.add_argument(
+    def add_detect_arguments(group, *, wordlist_default, wordlist_help):
+        group.add_argument("--wordlist", default=wordlist_default, help=wordlist_help)
+        group.add_argument(
             "--model", default="base.en",
             help="WhisperX model (default base.en; large-v3 for higher accuracy)",
         )
-        p.add_argument("--device", default="cpu")
-        p.add_argument("--language", default="en")
+        group.add_argument(
+            "--device", default="cpu",
+            help="where WhisperX runs: cpu or cuda (default cpu)",
+        )
+        group.add_argument(
+            "--language", default="en", help="the language spoken (default en)"
+        )
+        group.add_argument(
+            "--min-confidence", type=float, default=0.0,
+            help="drop words heard below this ASR confidence (default 0: keep all)",
+        )
+        group.add_argument(
+            "--inset", type=float, default=0.03,
+            help="seconds to shrink each span edge inward (default 0.03)",
+        )
+
+    episode_wordlist = (
+        "wordlist to censor against (default: the episode's [censor] "
+        "wordlist, else the one podio ships)"
+    )
+
+    def add_redetect(group):
+        group.add_argument(
+            "--redetect",
+            action="store_true",
+            help="detect again over manifests edited by hand, losing the edits",
+        )
 
     p_run = command(
-        "run", "clean then censor an episode — the whole pass",
+        "run",
         """
-        For every take in audio.toml:
+        steps 1-3 of the pass: clean, detect and bleep every take.
 
-          take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
-               ──▶ NAME_prepped.wav
-               ──▶ transcribe (WhisperX) ──▶ match the wordlist
-               ──▶ NAME_manifest.json + NAME_transcript.json
-               ──▶ splice the tone over each span ──▶ NAME_censored.wav
+        For every take in audio.toml, or only the TAKES named:
 
-        Then audio_analysis.toml, recording what was measured.
+          1  clean    measure ──▶ chain ──▶ gain match ──▶ NAME_prepped.wav
+          2  detect   transcribe (WhisperX) ──▶ match the wordlist
+                      ──▶ NAME_manifest.json + NAME_transcript.json
+          3  bleep    tone over each span ──▶ NAME_censored.wav
 
-        Where it stops early: --dry-run after measuring, --range after the
-        chain (an audition is a slice, so its timings are not the take's),
-        --review after the manifests, leaving 'podio bleep' to render them.
-        A manifest edited by hand since detection wrote it stops the run
-        rather than being overwritten; --redetect discards those edits.
+        Then audio_analysis.toml, recording what step 1 measured. A take with
+        censoring off in audio.toml stops after step 1.
+
+        Stopping early:
+          --dry-run   during step 1, after measuring; writes nothing
+          --range     after step 1, as NAME_audition.wav (a slice's timings
+                      are not the take's, so it is never censored)
+          --review    after step 2, so the manifests can be read first;
+                      'podio bleep' then does step 3
+
+        A manifest edited by hand since step 2 wrote it stops the run rather
+        than being overwritten; --redetect discards the edits.
+
+        next: import NAME_censored.wav into the NLE, or use 'podio finish' to
+        mux each take over its video as well.
         """,
     )
+    add_episode_arguments(p_run)
     add_clean_arguments(p_run)
-    add_detect_arguments(p_run, wordlist_default=None)
-    p_run.add_argument(
+    detect = p_run.add_argument_group("step 2, detect")
+    add_detect_arguments(
+        detect, wordlist_default=None, wordlist_help=episode_wordlist
+    )
+    add_redetect(detect)
+    detect.add_argument(
         "--review",
         action="store_true",
-        help="stop after detection so the manifests can be read before splicing",
-    )
-    p_run.add_argument(
-        "--redetect",
-        action="store_true",
-        help="re-detect even where a manifest has been edited by hand, losing those edits",
+        help="stop after step 2, so the manifests can be read before step 3",
     )
     p_run.set_defaults(func=_cmd_run)
 
     p_finish = command(
-        "finish", "clean, censor, and mux an episode for the NLE",
+        "finish",
         """
-        For every selected take in audio.toml:
+        steps 1-4 of the pass: clean, detect, bleep and mux every take.
 
-          NAME.wav ──▶ clean ──▶ censor ──▶ podio_artifacts/
-          NAME.mp4 + censored audio ──▶ NAME_muxed.mov
+        For every take in audio.toml, or only the TAKES named, each with a
+        NAME.mp4 beside it:
 
-        Each video is discovered by take name. Generated WAV, JSON, and TOML
-        files stay under podio_artifacts; the muxed MOVs land beside the raw
-        inputs. Censoring-disabled takes use their prepped audio.
+          1  clean    ──▶ podio_artifacts/NAME_prepped.wav
+          2  detect   ──▶ podio_artifacts/NAME_manifest.json
+                          + podio_artifacts/NAME_transcript.json
+          3  bleep    ──▶ podio_artifacts/NAME_censored.wav
+          4  mux      NAME.mp4 + censored take ──▶ NAME_muxed.mov
+
+        Every NAME.mp4 must exist before step 1 starts. The muxed MOVs land
+        beside the inputs; everything else stays under podio_artifacts. A
+        take with censoring off skips steps 2-3 and muxes its prepped take.
+        A manifest edited by hand stops the run, as in 'podio run'.
+
+        next: import NAME_muxed.mov into the NLE; after exporting the mix,
+        'podio master'.
         """,
     )
-    add_clean_arguments(p_finish, partial=False)
-    add_detect_arguments(p_finish, wordlist_default=None)
-    p_finish.add_argument(
+    add_episode_arguments(p_finish).add_argument(
         "--artifacts",
         type=Path,
         default=Path("podio_artifacts"),
-        help="intermediate output directory, relative to the episode "
+        help="where steps 1-3 write, relative to the episode "
              "(default: podio_artifacts)",
     )
-    p_finish.add_argument(
-        "--redetect",
-        action="store_true",
-        help="re-detect even where a manifest has been edited by hand, losing those edits",
+    add_clean_arguments(p_finish, partial=False)
+    detect = p_finish.add_argument_group("step 2, detect")
+    add_detect_arguments(
+        detect, wordlist_default=None, wordlist_help=episode_wordlist
     )
+    add_redetect(detect)
     p_finish.set_defaults(func=_cmd_finish, review=False)
 
     p_clean = command(
-        "clean", "clean an episode's takes -> prepped takes",
+        "clean",
         """
-        For every take in audio.toml:
+        step 1 of the pass: clean every take into a prepped take.
 
-          take ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match
-               ──▶ NAME_prepped.wav
+        For every take in audio.toml, or only the TAKES named:
 
-        Then audio_analysis.toml, recording what was measured.
+          1  measure  the noise floor: the 10th percentile of 1-second
+                      windows, so "floor+N" values in the chain can resolve
+          2  chain    the rig's enabled stages, with the episode's overrides,
+                      at 48 kHz
+          3  meter    integrated loudness and true peak after the chain
+          4  gain     one constant gain to the working level (default -24
+                      LUFS), held under the peak ceiling (default -2 dBTP)
+          ──▶ NAME_prepped.wav, 24-bit, 48 kHz
 
-        The first segment of 'podio run' on its own: nothing is transcribed
-        and nothing is censored. Prepped takes are what 'podio detect' and
-        'podio bleep' expect to be handed afterwards.
+        Then audio_analysis.toml, recording what was measured and resolved.
+
+        Stopping early:
+          --dry-run   after 1, printing each resolved chain; writes nothing
+          --range     renders only a slice, to NAME_audition.wav
+
+        Nothing is transcribed or censored. next: 'podio detect' on each
+        prepped take, or 'podio run' for steps 1-3 together.
         """,
     )
+    add_episode_arguments(p_clean)
     add_clean_arguments(p_clean)
     p_clean.set_defaults(func=_cmd_clean)
 
-    p_devices = command(
-        "devices", "list the microphones a bumper can be recorded from",
+    p_man = command(
+        "detect",
         """
+        step 2 of the pass, on one file: find the words to bleep.
+
+          1  transcribe  WhisperX: every word, with its timing (the first run
+                         downloads the model)
+          2  match       whole words and phrases from the wordlist, never
+                         substrings; the allowlist is never matched
+          3  adjust      drop spans under --min-confidence, shrink each edge
+                         by --inset, merge what still overlaps
+          ──▶ OUT (default manifest.json): the spans to bleep
+          ──▶ NAME_transcript.json beside it, where NAME is OUT's name
+              without _manifest: every word heard
+
+        Renders no audio. next: read or edit the manifest, then 'podio bleep'.
+        """,
+    )
+    p_man.add_argument("audio", help="the audio to transcribe, e.g. a prepped take")
+    p_man.add_argument(
+        "--out", default="manifest.json",
+        help="the manifest to write (default: manifest.json)",
+    )
+    add_detect_arguments(
+        p_man.add_argument_group("detection"),
+        wordlist_default=WORDLIST, wordlist_help="wordlist to censor against "
+        "(default: the one podio ships)",
+    )
+    p_man.set_defaults(func=_cmd_detect)
+
+    p_bleep = command(
+        "bleep",
+        """
+        step 3 of the pass, on one file: put the tone over every span.
+
+          1  decode   AUDIO at its own rate, as mono
+          2  splice   a sine tone (1 kHz, --freq) at -27 dBFS RMS over each
+                      span MANIFEST lists; every other sample is untouched
+          ──▶ OUT (default censored.wav)
+
+        OUT's extension picks the output: .wav is 24-bit audio; .mov or .mkv
+        put the 24-bit audio back over AUDIO's video; anything else does the
+        same but has to encode the audio to AAC.
+
+        Nothing is transcribed: what the manifest lists is what gets bleeped,
+        which is how a manifest edited by hand is rendered.
+        """,
+    )
+    p_bleep.add_argument("audio", help="the audio to censor, e.g. a prepped take")
+    p_bleep.add_argument("manifest", help="the spans to bleep, from 'podio detect'")
+    p_bleep.add_argument(
+        "--out", default="censored.wav",
+        help=f"output file (default: censored.wav). .wav and "
+             f"{'/'.join(sorted(ffmpeg.PCM_CONTAINERS))} keep 24-bit PCM; "
+             f"anything else has to encode the audio to AAC",
+    )
+    p_bleep.add_argument(
+        "--freq", type=float, default=1000.0,
+        help="the tone's frequency in Hz (default 1000)",
+    )
+    p_bleep.set_defaults(func=_cmd_bleep)
+
+    p_mux = command(
+        "mux",
+        """
+        step 4 of the pass, on one file: put a finished track over a video.
+
+          VIDEO + AUDIO ──▶ picture copied, audio replaced ──▶ OUT
+
+        OUT defaults to VIDEO_muxed.mov. .mov and .mkv copy the wav in as
+        it is; anything else re-encodes it to AAC. Nothing is synced or
+        mixed: that happens in the NLE.
+        """,
+    )
+    p_mux.add_argument("video", help="the source video (its picture is copied through)")
+    p_mux.add_argument("audio", help="the audio to put over it, e.g. a censored take")
+    p_mux.add_argument(
+        "--out", default=None,
+        help="output file (default: VIDEO_muxed.mov; .mov/.mkv keep the wav "
+             "as it is, anything else re-encodes it to AAC)",
+    )
+    p_mux.set_defaults(func=_cmd_mux)
+
+    p_master = command(
+        "master",
+        """
+        step 5 of the pass, after the NLE: bring the exported mixdown to
+        delivery loudness, -16 LUFS integrated under -1 dBTP.
+
+          1  measure  integrated loudness of VIDEO's first audio stream
+          2  gain     one constant gain to -16 LUFS
+          3  limit    a true-peak limiter: 4x oversampled, -1.5 dB ceiling
+          4  correct  limiting costs loudness, so 2-3 run again with the
+                      shortfall added, until within 0.2 LU (at most 4 times)
+          5  encode   ──▶ STEM.mp4  the picture copied, 192 kbps AAC
+                      ──▶ STEM.mp3  the feed, 128 kbps, 44.1 kHz
+          6  verify   both are metered; WARN if either misses -16 by more
+                      than 1 LU or peaks over -1 dBTP
+
+        Takes are untouched: they stay at the working level, and this is the
+        only step that sets loudness on the mix.
+        """,
+    )
+    p_master.add_argument("video", help="the NLE's exported mixdown")
+    p_master.add_argument(
+        "--out", default=None,
+        help="output path without extension (default: VIDEO_mastered)",
+    )
+    p_master.set_defaults(func=_cmd_master)
+
+    p_devices = command(
+        "devices",
+        """
+        standalone, outside the pass: list the microphones a bumper can be
+        recorded from.
+
         Records nothing. Numbers this machine's capture devices so that
-        'podio bumper --device N' can name one of them.
+        'podio bumper --device N' can name one. The numbers shift when a
+        device connects; the name printed beside each one does not.
         """,
     )
     p_devices.set_defaults(func=_cmd_devices)
 
     p_bumper = command(
-        "bumper", "record a bumper from a microphone",
+        "bumper",
         """
-          microphone ──▶ ffmpeg capture ──▶ mono 48 kHz 24-bit wav
+        standalone, outside the pass: record an intro, outro or transition.
+
+          microphone ──▶ ffmpeg capture ──▶ OUT, mono 48 kHz 24-bit
+
+        Captured through OpenAL; on Linux, pulse or alsa if OpenAL finds
+        nothing.
 
         No chain and no gain match: a bumper is recorded deliberately in one
         go, and there is nothing to match it against. It comes out the same
         shape as a prepped take, so it drops onto the timeline beside one.
-        Press q to stop. An existing file is kept unless --force.
+        Press q to stop. An existing OUT is kept unless --force.
         """,
     )
-    p_bumper.add_argument("out", nargs="?", default="bumper.wav")
+    p_bumper.add_argument(
+        "out", nargs="?", default="bumper.wav",
+        help="the file to record to (default: bumper.wav)",
+    )
     p_bumper.add_argument(
         "--device",
         help="a number from 'podio devices', or a device name to pass straight "
@@ -514,92 +712,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_bumper.set_defaults(func=_cmd_bumper)
 
     p_norm = command(
-        "normalize", "decode audio to 16kHz mono wav",
+        "normalize",
         """
-          audio ──▶ ffmpeg decode ──▶ 16 kHz mono wav
+        standalone, outside the pass: decode any audio to 16 kHz mono wav.
 
-        Stands outside the pass. Detection hands audio to WhisperX undecoded,
-        so nothing here needs this; it is for looking at a file by hand.
+          AUDIO ──▶ ffmpeg decode ──▶ OUT, 16 kHz mono
+
+        Nothing in the pass needs this: detection hands audio to WhisperX
+        undecoded. It is for listening to a file the way the ASR hears it.
         """,
     )
-    p_norm.add_argument("audio")
-    p_norm.add_argument("--out", default="normalized.wav")
+    p_norm.add_argument("audio", help="any file ffmpeg can decode")
+    p_norm.add_argument(
+        "--out", default="normalized.wav",
+        help="the wav to write (default: normalized.wav)",
+    )
     p_norm.set_defaults(func=_cmd_normalize)
-
-    p_man = command(
-        "detect", "detect profanity -> censor manifest JSON",
-        """
-          audio ──▶ transcribe (WhisperX) ──▶ match the wordlist
-                ──▶ OUT.json (the spans to bleep)
-                ──▶ OUT_transcript.json (every word, with its timing)
-
-        Renders no audio: review the manifest, then 'podio bleep' to splice
-        the tone over the spans it lists. 'podio run' does this step for a
-        whole episode, against the prepped takes.
-        """,
-    )
-    p_man.add_argument("audio")
-    p_man.add_argument("--out", default="manifest.json")
-    add_detect_arguments(p_man, wordlist_default=WORDLIST)
-    p_man.set_defaults(func=_cmd_detect)
-
-    p_mux = command(
-        "mux", "replace a video's audio with a finished track",
-        """
-          video + audio ──▶ remux, picture copied through ──▶ SOURCE_muxed.mov
-
-        After the pass, not part of it: the picture is never touched and the
-        audio is never mixed. Syncing and mixing happen in the NLE.
-        """,
-    )
-    p_mux.add_argument("video", help="the source video (its picture is copied through)")
-    p_mux.add_argument("audio", help="the audio to put over it, e.g. a censored wav")
-    p_mux.add_argument(
-        "--out", default=None,
-        help="output file (default: SOURCE_muxed.mov; .mov/.mkv keep the wav "
-             "as it is, anything else re-encodes it to AAC)",
-    )
-    p_mux.set_defaults(func=_cmd_mux)
-
-    p_master = command(
-        "master", "master the NLE's mixdown to -16 LUFS / -1 dBTP",
-        """
-          mixdown.mp4 ──▶ measure ──▶ constant gain ──▶ true-peak limiter
-                      ──▶ STEM.mp4 (picture copied through, AAC)
-                      ──▶ STEM.mp3 (the feed, 44.1 kHz)
-
-        After the NLE, not part of the pass: takes stay at the working level
-        and this sets the delivery loudness once, on the mix. Both outputs
-        are metered again and a miss of the target is reported.
-        """,
-    )
-    p_master.add_argument("video", help="the NLE's exported mixdown")
-    p_master.add_argument(
-        "--out", default=None,
-        help="output path without extension (default: SOURCE_mastered)",
-    )
-    p_master.set_defaults(func=_cmd_master)
-
-    p_bleep = command(
-        "bleep", "render censored audio from a manifest",
-        """
-          audio + manifest ──▶ splice the tone over each span ──▶ censored wav
-
-        The last step of 'podio run', on its own — this is how a manifest
-        that was edited by hand gets rendered. Nothing is transcribed and no
-        spans are detected: what the manifest lists is what gets bleeped.
-        """,
-    )
-    p_bleep.add_argument("audio")
-    p_bleep.add_argument("manifest")
-    p_bleep.add_argument(
-        "--out", default="censored.wav",
-        help=f"output file (default: censored.wav). .wav and "
-             f"{'/'.join(sorted(ffmpeg.PCM_CONTAINERS))} keep 24-bit PCM; "
-             f"anything else has to encode the audio to AAC",
-    )
-    p_bleep.add_argument("--freq", type=float, default=1000.0)
-    p_bleep.set_defaults(func=_cmd_bleep)
 
     return parser
 
