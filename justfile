@@ -1,4 +1,5 @@
-# podio operations layer.
+# Repo tasks: install, test, and a one-shot censor demo. Recipes run in this
+# directory, so episodes are worked on with `podio` itself, not through here.
 # Run everything inside the nix dev shell:  nix develop -c just <task>
 #
 # nix supplies ffmpeg, just, the interpreter and every Python dependency —
@@ -12,10 +13,12 @@ podio := env_var_or_default("PODIO", "python -m podio")
 default:
     @just --list
 
-# Put `podio` on your PATH imperatively, for a machine with no nix config of
-# its own. Personal machines get it from the home-manager module in ~/etc; a
-# profile copy would shadow that one. To just try it, no install needed:
+# For a machine with no nix config of its own. Personal machines get podio
+# from the home-manager module in ~/etc; a profile copy would shadow that one.
+# To just try it, no install needed:
 #   nix run github:yellingatrobots/podio -- devices
+#
+# Put `podio` on your PATH imperatively
 install:
     nix profile install .
 
@@ -23,44 +26,9 @@ install:
 test:
     pytest -q
 
-# Clean an episode's takes into prepped takes. Run from the episode directory.
-clean *args:
-    {{podio}} clean {{args}}
-
-# List the microphones a bumper can be recorded from.
-devices:
-    {{podio}} devices
-
-# Record a bumper (intro/outro/transition). `device` takes a number from
-# `just devices`; omit it for the system default. Press q to stop.
-bumper out="bumper.wav" device="":
-    {{podio}} bumper "{{out}}" {{ if device != "" { "--device " + device } else { "" } }}
-
-# Master the NLE's exported mixdown to -16 LUFS / -1 dBTP
-# -> SOURCE_mastered.mp4 and SOURCE_mastered.mp3 beside it.
-master video:
-    {{podio}} master "{{video}}"
-
-# Debug helper: normalize an audio file to 16kHz mono wav
-normalize audio out="normalized.wav":
-    {{podio}} normalize "{{audio}}" --out "{{out}}"
-
-# Transcribe + detect profanity -> write a censor manifest (JSON).
-# `model` defaults to base.en (fast); pass model=large-v3 for higher accuracy.
-# `min_confidence` drops shaky detections (e.g. min_confidence=0.5); default keeps all.
-# `wordlist` overrides the one shipped with the tool.
-detect audio out="manifest.json" model="base.en" min_confidence="0" wordlist="":
-    {{podio}} detect "{{audio}}" --out "{{out}}" {{ if wordlist != "" { "--wordlist " + wordlist } else { "" } }} --model {{model}} --min-confidence {{min_confidence}}
-
-# Render a censored copy from a manifest (1 kHz bleep tone).
-# Output format follows `out`'s extension: .wav writes 24-bit audio directly;
-# anything else remuxes over the source, video copied through untouched. .mov
-# and .mkv carry the audio as 24-bit PCM; .mp4/.m4a can only encode it to AAC.
-bleep audio manifest out="censored.wav":
-    {{podio}} bleep "{{audio}}" "{{manifest}}" --out "{{out}}"
-
-# One-shot: detect + render so you can just hear it. Fast model by default.
-# e.g. `just censor test_audio/profanity.m4a`
+# e.g. `just censor test_audio/profanity.m4a`. Fast model by default.
+#
+# One-shot: detect + render so you can just hear it
 censor audio out="censored.wav" model="base.en":
     #!/usr/bin/env bash
     set -euo pipefail
