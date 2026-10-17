@@ -6,6 +6,10 @@ from podio.ffmpeg import (
     FFMPEG_VARIABLE,
     analyse_command,
     apply_gain_command,
+    encode_mp3_command,
+    encode_video_command,
+    master_command,
+    measure_command,
     executable,
     parse_loudness,
     parse_noise_floor,
@@ -163,3 +167,42 @@ def test_apply_gain_pins_the_limiter_auto_level_off():
     )
     chain = cmd[cmd.index("-af") + 1]
     assert chain == "volume=4.8dB,alimiter=limit=0.70795:level=false"
+
+
+def test_measuring_a_mixdown_meters_only_its_first_audio_stream():
+    cmd = measure_command(Path("ep.mp4"))
+    assert cmd[cmd.index("-map") + 1] == "0:a:0"
+    assert cmd[cmd.index("-af") + 1] == "ebur128=peak=true"
+    assert cmd[-3:] == ["-f", "null", "-"]
+
+
+def test_the_master_limits_oversampled_and_leaves_the_level_alone():
+    cmd = master_command(Path("ep.mp4"), 8.0, Path("master.wav"))
+    chain = cmd[cmd.index("-af") + 1].split(",")
+
+    assert chain[0] == "volume=8dB"
+    assert chain[1] == "aresample=192000"
+    assert chain[2].startswith("alimiter=")
+    # alimiter re-normalises unless told not to, and its look-ahead would
+    # shift the audio against the picture unless compensated.
+    assert "level=false" in chain[2] and "latency=true" in chain[2]
+    assert chain[3] == "aresample=48000"
+    # Metered as it renders, so a pass that misses the target is known at once.
+    assert chain[4] == "ebur128=peak=true"
+    assert cmd[cmd.index("-c:a") + 1] == "pcm_s24le"
+    assert cmd[-1] == "master.wav"
+
+
+def test_the_mastered_video_copies_the_picture_and_encodes_aac():
+    cmd = encode_video_command(Path("ep.mp4"), Path("master.wav"), Path("out.mp4"))
+    assert cmd[cmd.index("-c:v") + 1] == "copy"
+    assert cmd[cmd.index("-c:a") + 1] == "aac"
+    assert "+faststart" in cmd
+    assert cmd[-1] == "out.mp4"
+
+
+def test_the_feed_mp3_is_44_1k():
+    cmd = encode_mp3_command(Path("master.wav"), Path("out.mp3"))
+    assert cmd[cmd.index("-c:a") + 1] == "libmp3lame"
+    assert cmd[cmd.index("-ar") + 1] == "44100"
+    assert cmd[-1] == "out.mp3"

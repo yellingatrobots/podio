@@ -13,7 +13,7 @@ import wave
 from array import array
 from pathlib import Path
 
-from .levels import db_to_linear
+from .levels import LIMITER_CEILING_DB, db_to_linear
 
 #: Where `just install` records the ffmpeg the dev shell resolved to.
 FFMPEG_VARIABLE = "PODIO_FFMPEG"
@@ -40,6 +40,13 @@ RANGE = re.compile(r"^(\d+(?::\d+){0,2}(?:\.\d+)?)\+(\d+(?:\.\d+)?)$")
 #: Containers that hold PCM, so a finished WAV can be muxed in untouched. MP4
 #: is not one of them in any player worth relying on.
 PCM_CONTAINERS = {".mov", ".mkv"}
+#: alimiter limits sample peaks. Run four times over the working rate, the
+#: samples land close enough to the inter-sample peaks to limit true peak.
+OVERSAMPLED_RATE = 4 * WORKING_RATE
+#: Delivery encodes. 44.1 kHz 128 kbps is what Apple asks of a feed MP3.
+VIDEO_AUDIO_BITRATE = "192k"
+FEED_BITRATE = "128k"
+FEED_RATE = 44_100
 
 Audition = tuple[float, float] | None
 
@@ -292,6 +299,60 @@ def mux(source, audio, destination) -> Path:
     """Replace `source`'s audio track with `audio`, copying any video through."""
     _execute(mux_command(Path(source), Path(audio), Path(destination)))
     return Path(destination)
+
+
+def measure_command(source: Path) -> list[str]:
+    """Meter a mixdown's loudness and true peak, writing nothing."""
+    return _base(source, None) + [
+        "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-",
+    ]
+
+
+def master_command(source: Path, gain_db: float, destination: Path) -> list[str]:
+    """Gain to the delivery loudness, limit the peaks that pushes over, and
+    meter the result.
+
+    `level=false` because alimiter otherwise re-normalises its output, and
+    `latency=true` so its look-ahead does not move the audio off the picture.
+    """
+    limiter = (
+        f"alimiter=limit={db_to_linear(LIMITER_CEILING_DB):.5f}"
+        ":level=false:latency=true"
+    )
+    chain = _filters(
+        f"volume={gain_db:g}dB",
+        f"aresample={OVERSAMPLED_RATE}",
+        limiter,
+        f"aresample={WORKING_RATE}",
+        "ebur128=peak=true",
+    )
+    return _base(source, None) + [
+        "-map", "0:a:0", "-af", chain, "-c:a", "pcm_s24le", str(destination),
+    ]
+
+
+def encode_video_command(video: Path, audio: Path, destination: Path) -> list[str]:
+    """Put the master over `video`'s picture, untouched, as a web-ready MP4."""
+    return [
+        executable(), "-hide_banner", "-y",
+        "-i", str(video),
+        "-i", str(audio),
+        "-map", "0:v?", "-map", "1:a", "-map_metadata", "0",
+        "-c:v", "copy", "-c:a", "aac", "-b:a", VIDEO_AUDIO_BITRATE,
+        "-movflags", "+faststart",
+        "-shortest",
+        str(destination),
+    ]
+
+
+def encode_mp3_command(audio: Path, destination: Path) -> list[str]:
+    """Encode the master as the podcast feed's MP3."""
+    return [
+        executable(), "-hide_banner", "-y",
+        "-i", str(audio),
+        "-c:a", "libmp3lame", "-b:a", FEED_BITRATE, "-ar", str(FEED_RATE),
+        str(destination),
+    ]
 
 
 def _execute(
