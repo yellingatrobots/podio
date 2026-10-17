@@ -228,3 +228,49 @@ def test_finish_keeps_only_the_muxed_take_in_the_episode_root(episode, monkeypat
     assert (artifacts / "audio_analysis.toml").exists()
     assert not (episode / "alex_prepped.wav").exists()
     assert not (episode / "alex_censored.wav").exists()
+
+
+SPEECH = Path(__file__).resolve().parents[1] / "test_audio" / "clean.m4a"
+
+
+def make_mixdown(path: Path):
+    """What the NLE exports: picture over raw speech, quiet and peaky enough
+    (about -37 LUFS, 22 dB peak-to-loudness) that the limiter has to work."""
+    subprocess.run(
+        [
+            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
+            "-f", "lavfi", "-i", "testsrc=size=160x120:rate=10",
+            "-i", str(SPEECH),
+            "-map", "0:v", "-map", "1:a",
+            "-c:v", "mpeg4", "-c:a", "aac", "-b:a", "256k", "-shortest", str(path),
+        ],
+        check=True,
+    )
+
+
+def video_stream(path: Path) -> str:
+    return subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
+         "-show_entries", "stream=codec_name,nb_read_packets", "-of", "csv=p=0",
+         str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def test_master_delivers_at_minus_16_under_minus_1_with_the_picture_untouched(tmp_path):
+    mixdown = tmp_path / "ep.mp4"
+    make_mixdown(mixdown)
+
+    assert main(["master", str(mixdown)]) == 0
+
+    for out in (tmp_path / "ep_mastered.mp4", tmp_path / "ep_mastered.mp3"):
+        integrated, peak = loudness_of(out)
+        assert integrated == pytest.approx(-16.0, abs=1.0)
+        assert peak <= -1.0
+    assert video_stream(tmp_path / "ep_mastered.mp4") == video_stream(mixdown)
+    rate = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "stream=sample_rate",
+         "-of", "csv=p=0", str(tmp_path / "ep_mastered.mp3")],
+        capture_output=True, text=True, check=True,
+    ).stdout.strip()
+    assert rate == "44100"

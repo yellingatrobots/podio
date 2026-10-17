@@ -12,11 +12,12 @@ import sys
 import textwrap
 from pathlib import Path
 
-from . import __version__, capture, censor, config, ffmpeg
+from . import __version__, capture, censor, config, ffmpeg, master
 from .bleep import render_file
 from .clean import Result, clean_all, clean_episode, report, select_takes
 from .config import scaffold
 from .detect import transcribe_and_detect
+from .levels import TARGET_LUFS, TRUE_PEAK_LIMIT_DB, meets_delivery
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
@@ -56,6 +57,35 @@ def _cmd_mux(args) -> int:
         report(f"error: {error}")
         return 1
     print(f"wrote {out}")
+    return 0
+
+
+def _cmd_master(args) -> int:
+    """Bring the NLE's mixdown to delivery loudness, for video and the feed."""
+    video = Path(args.video)
+    stem = Path(args.out) if args.out else master.default_stem(video)
+    try:
+        result = master.master(video, stem)
+    except (ValueError, RuntimeError) as error:
+        report(f"error: {error}")
+        return 1
+
+    source = result.source
+    report(
+        f"mixdown  I {source.integrated_lufs:6.1f} LUFS  TP {source.true_peak_db:5.1f} dB"
+        f"  gain {result.gain_db:+.1f} dB"
+    )
+    for out, loudness in result.delivered.items():
+        report(
+            f"{out.suffix[1:]:8} I {loudness.integrated_lufs:6.1f} LUFS"
+            f"  TP {loudness.true_peak_db:5.1f} dB"
+        )
+        if not meets_delivery(loudness.integrated_lufs, loudness.true_peak_db):
+            report(
+                f"WARN     {out.name} misses {TARGET_LUFS:g} LUFS / "
+                f"{TRUE_PEAK_LIMIT_DB:g} dBTP"
+            )
+        print(f"wrote {out}")
     return 0
 
 
@@ -291,12 +321,14 @@ the pass:
   takes ──▶ clean ─────────────────────────▶ prepped takes
                  └─▶ detect ──▶ manifests
                                 └─▶ bleep ─▶ censored takes ──▶ NLE
+  NLE mixdown ──▶ master ──▶ mastered mp4 + feed mp3
 
   podio run       all of it, take by take
   podio finish    all of it, then mux matching videos
   podio clean     the first segment only — nothing is transcribed
   podio detect    one file  ──▶ one manifest (and its transcript)
   podio bleep     one manifest ──▶ one censored file
+  podio master    the NLE's mixdown ──▶ delivery loudness
 
 around it: 'devices' and 'bumper' record intros and outros, 'mux' puts a
 finished track over a video, 'normalize' decodes anything to 16 kHz mono.
@@ -530,6 +562,25 @@ def build_parser() -> argparse.ArgumentParser:
              "as it is, anything else re-encodes it to AAC)",
     )
     p_mux.set_defaults(func=_cmd_mux)
+
+    p_master = command(
+        "master", "master the NLE's mixdown to -16 LUFS / -1 dBTP",
+        """
+          mixdown.mp4 ──▶ measure ──▶ constant gain ──▶ true-peak limiter
+                      ──▶ STEM.mp4 (picture copied through, AAC)
+                      ──▶ STEM.mp3 (the feed, 44.1 kHz)
+
+        After the NLE, not part of the pass: takes stay at the working level
+        and this sets the delivery loudness once, on the mix. Both outputs
+        are metered again and a miss of the target is reported.
+        """,
+    )
+    p_master.add_argument("video", help="the NLE's exported mixdown")
+    p_master.add_argument(
+        "--out", default=None,
+        help="output path without extension (default: SOURCE_mastered)",
+    )
+    p_master.set_defaults(func=_cmd_master)
 
     p_bleep = command(
         "bleep", "render censored audio from a manifest",
