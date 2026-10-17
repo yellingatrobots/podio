@@ -10,6 +10,8 @@ gigabyte of I/O per run.
 
 ## Consequences
 
+_Partly superseded by 0003: `podio master` now masters the NLE's mixdown._
+
 Nothing in this repo produces a distribution master; if that ever needs automating it
 is a separate concern operating on the NLE's mixdown, not an extra mode here. Takes
 must be re-synced in the NLE because the clean tracks are bare audio, and the two

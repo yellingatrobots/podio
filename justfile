@@ -36,6 +36,11 @@ devices:
 bumper out="bumper.wav" device="":
     {{podio}} bumper "{{out}}" {{ if device != "" { "--device " + device } else { "" } }}
 
+# Master the NLE's exported mixdown to -16 LUFS / -1 dBTP
+# -> SOURCE_mastered.mp4 and SOURCE_mastered.mp3 beside it.
+master video:
+    {{podio}} master "{{video}}"
+
 # Debug helper: normalize an audio file to 16kHz mono wav
 normalize audio out="normalized.wav":
     {{podio}} normalize "{{audio}}" --out "{{out}}"

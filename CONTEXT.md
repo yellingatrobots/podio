@@ -2,8 +2,8 @@
 
 The vocabulary for the audio pass that sits between raw per-speaker recordings
 and the NLE timeline for a *Yelling at Robots* episode. The pass cleans each
-take and censors it. Syncing, mixing and final distribution loudness belong to
-the NLE.
+take and censors it. Syncing and mixing belong to the NLE; delivery loudness
+is set afterwards, once, by mastering the NLE's mixdown.
 
 ## Language
 
@@ -71,6 +71,16 @@ The integrated loudness every prepped take is brought to. Deliberately not a
 distribution loudness — it exists so takes sit at a common level with headroom
 for the NLE to mix and finalise.
 _Avoid_: target loudness, LUFS target, normalization target
+
+**Master**:
+The NLE's mixdown, brought to the delivery loudness and encoded for video and
+the feed. The only output podio makes from the mix rather than from a take.
+_Avoid_: export, render, final
+
+**Delivery Loudness**:
+-16 LUFS integrated under -1 dBTP: what a master is brought to. Distinct from
+the **working level**, which is where takes sit before they are mixed.
+_Avoid_: target loudness, LUFS target
 
 **Working Rate**:
 48 kHz — the sample rate the chain runs at, and so the rate every prepped and

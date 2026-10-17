@@ -8,9 +8,10 @@ denoised, leveled, gain-matched 24-bit WAVs at a common working rate (48 kHz
 unless the episode says otherwise), sitting at a common working level with
 headroom, and a reviewable manifest of the spans to bleep.
 
-Syncing, mixing and final distribution loudness happen afterwards in the NLE.
-This tool deliberately stops short of a master —
-[ADR 0001](docs/adr/0001-clean-pass-stops-short-of-a-master.md).
+Syncing and mixing happen afterwards in the NLE. The pass never sets delivery
+loudness on a take ([ADR 0001](docs/adr/0001-clean-pass-stops-short-of-a-master.md));
+`podio master` sets it once, on the NLE's exported mixdown
+([ADR 0003](docs/adr/0003-podio-masters-the-nle-mixdown.md)).
 
 Vocabulary is in [CONTEXT.md](CONTEXT.md); it is worth reading first, because
 the words below (*take*, *rig*, *stage*, *span*, *manifest*) are used precisely.
@@ -187,6 +188,39 @@ josh_transcript.json
 Use `--artifacts DIR` to change that directory. Relative paths are resolved
 from the episode directory. If censoring is disabled for a take, `finish` muxes
 its prepped audio instead.
+
+## Mastering the mixdown
+
+Once the NLE has exported the mixed episode, `podio master` sets its delivery
+loudness, which is -16 LUFS integrated under -1 dBTP:
+
+```sh
+podio master ep16.mp4                # -> ep16_mastered.mp4, ep16_mastered.mp3
+podio master ep16.mp4 --out final/16 # -> final/16.mp4, final/16.mp3
+```
+
+The mp4 keeps the picture as exported and carries the master as 192 kbps AAC.
+The mp3 is the feed file, 128 kbps at 44.1 kHz. Both are made from the same
+master, in four steps:
+
+1. Measure the mixdown.
+2. Apply one constant gain to reach -16.
+3. Catch the peaks that gain pushes over with a true-peak limiter (alimiter at
+   4x oversampling, ceiling -1.5 dB).
+4. Limiting costs loudness, so render again with the shortfall added to the
+   gain until within 0.2 LU.
+
+Both encodes are metered again and printed:
+
+```
+mixdown  I  -36.8 LUFS  TP -14.4 dB  gain +23.5 dB
+mp4      I  -16.1 LUFS  TP  -1.4 dB
+mp3      I  -16.5 LUFS  TP  -1.9 dB
+```
+
+A `WARN` line means an encode landed more than 1 LU off -16 or over -1 dBTP.
+Takes are unaffected: they stay at the working level, and this is the only step
+that sets loudness on the mix. See `docs/adr/0003`.
 
 ## The whole pass
 
