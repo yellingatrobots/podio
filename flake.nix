@@ -95,10 +95,10 @@
 
         # `inputsFrom` gives the shell podio's own dependency closure, so the
         # shell and the installed tool cannot disagree. podio itself is absent:
-        # PYTHONPATH and the justfile's `python -m podio` run the working tree.
+        # PYTHONPATH lets `python -m podio` run the working tree.
         #
-        # uv.lock still describes a `uv sync` for anyone without nix — set
-        # $PODIO to "uv run podio". Nothing here exercises that path.
+        # uv.lock still describes a `uv sync` for anyone without nix, then
+        # `uv run podio`. Nothing here exercises that path.
         devShells.default = pkgs.mkShell {
           inputsFrom = [ podio ];
           packages = [

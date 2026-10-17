@@ -17,8 +17,8 @@ OUTPUT_SUFFIXES = ("_prepped", "_censored", "_audition")
 #: otherwise — both what a scaffolded episode starts at and what an episode
 #: omitting the key gets. Low enough to leave the NLE room, and far enough
 #: apart to absorb a 22 dB peak-to-loudness ratio before the gain match has to
-#: clamp. `levels.TONE_LEVEL_DB` is derived from the working level: move one
-#: and move the other.
+#: clamp. `levels.TONE_LEVEL_DB` is set against this default, not derived
+#: from it: move one and move the other.
 DEFAULT_WORKING_LEVEL_DB = -24.0
 DEFAULT_PEAK_CEILING_DB = -2.0
 #: Take sub-tables that configure something other than a stage of the chain,

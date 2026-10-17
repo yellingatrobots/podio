@@ -50,8 +50,8 @@ def _without_torchcodec_warning() -> Iterator[None]:
     path to open — the warning fires from an import, not from a failure.
 
     It is also not fixable where podio runs: torchcodec wants FFmpeg 4-7
-    (libavutil.56-59), podio pins ffmpeg 8 because it parses that version's
-    output, and the shipped dylibs carry no LC_RPATH to find a libavutil with
+    (libavutil.56-59), the flake's ffmpeg is 8 and podio parses its output,
+    and the shipped dylibs carry no LC_RPATH to find a libavutil with
     anyway. Only this one message is filtered; everything else still surfaces.
     """
     with warnings.catch_warnings():
@@ -78,8 +78,8 @@ class WhisperXTranscriber:
     """Word-level ASR via WhisperX (Whisper + wav2vec2 forced alignment).
 
     WhisperX is imported inside `transcribe` so importing this module — and
-    running the test suite — never requires torch. Install the stack with
-    `just setup-asr`.
+    running the test suite — never requires torch. It is a hard dependency all
+    the same, supplied by the flake (or `uv sync`).
     """
 
     def __init__(

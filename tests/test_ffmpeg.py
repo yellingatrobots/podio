@@ -22,7 +22,7 @@ def test_executable_is_whatever_is_on_the_path_by_default():
     assert executable() == "ffmpeg"
 
 
-def test_executable_prefers_the_one_just_install_baked_in(tmp_path, monkeypatch):
+def test_executable_prefers_the_one_the_package_baked_in(tmp_path, monkeypatch):
     """The installed entry point runs from episode directories, where the
     ambient ffmpeg is whatever the machine has rather than the pinned one."""
     baked = tmp_path / "ffmpeg"

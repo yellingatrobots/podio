@@ -1,7 +1,5 @@
-"""Command-line entry point — the only place arguments are parsed.
-
-Owns what the stages should not: ffmpeg normalization (with a temp file) and
-constructing the real WhisperX transcriber.
+"""Command-line entry point — the only place arguments are parsed, and where
+the real WhisperX transcriber is constructed.
 """
 
 from __future__ import annotations
@@ -508,7 +506,7 @@ def build_parser() -> argparse.ArgumentParser:
     p_bumper.add_argument(
         "--device",
         help="a number from 'podio devices', or a device name to pass straight "
-             "to ffmpeg (default: the system's own choice, or device 0)",
+             "to ffmpeg (default: the system's own choice)",
     )
     p_bumper.add_argument(
         "--force", action="store_true", help="record over an existing file"

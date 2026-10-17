@@ -69,7 +69,7 @@ _Avoid_: pipeline, graph, filter string
 **Working Level**:
 The integrated loudness every prepped take is brought to. Deliberately not a
 distribution loudness — it exists so takes sit at a common level with headroom
-for the NLE to mix and finalise.
+for the NLE to mix. Delivery loudness is the master's.
 _Avoid_: target loudness, LUFS target, normalization target
 
 **Master**:
@@ -138,8 +138,9 @@ when a word was missed.
 _Avoid_: captions, subtitles, ASR output
 
 **Tone Level**:
-The level of the tone that replaces a span, expressed relative to the working
-level so it tracks it. A censored passage is meant to be unmistakable, not the
+The level of the tone that replaces a span: -27 dBFS RMS, three dB under the
+default working level. Fixed, so it does not follow an episode that sets its
+own working level. A censored passage is meant to be unmistakable, not the
 loudest thing in the episode.
 _Avoid_: bleep volume, amplitude, tone gain
 

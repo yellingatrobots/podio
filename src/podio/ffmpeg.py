@@ -15,7 +15,7 @@ from pathlib import Path
 
 from .levels import LIMITER_CEILING_DB, db_to_linear
 
-#: Where `just install` records the ffmpeg the dev shell resolved to.
+#: Where the installed package's wrapper records the flake's own ffmpeg.
 FFMPEG_VARIABLE = "PODIO_FFMPEG"
 
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
@@ -57,8 +57,8 @@ def executable() -> str:
     Which binary this is is not incidental. podio reads ffmpeg's human-readable
     output, and recording needs a build carrying OpenAL — but the installed
     entry point is run from episode directories, where the ambient ffmpeg is
-    whatever the machine happens to have rather than the one the flake pins. So
-    `just install` bakes the dev shell's own ffmpeg into $PODIO_FFMPEG.
+    whatever the machine happens to have rather than the flake's. So the
+    package's wrapper sets $PODIO_FFMPEG to the flake's ffmpeg at build time.
 
     A path that no longer resolves falls back to PATH rather than failing: the
     store path moves whenever the flake is updated, and a stale install should

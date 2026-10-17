@@ -1,12 +1,12 @@
 # podio
 
 Cleans and censors the raw per-speaker takes of a podcast episode into
-NLE-ready audio.
+NLE-ready audio, and masters the NLE's mixdown for delivery.
 
 In: raw mono WAVs, one per speaker, at whatever rate they were recorded at. Out:
-denoised, leveled, gain-matched 24-bit WAVs at a common working rate (48 kHz
-unless the episode says otherwise), sitting at a common working level with
-headroom, and a reviewable manifest of the spans to bleep.
+denoised, leveled, gain-matched 24-bit WAVs at the 48 kHz working rate,
+sitting at a common working level with headroom, and a reviewable manifest of
+the spans to bleep.
 
 Syncing and mixing happen afterwards in the NLE. The pass never sets delivery
 loudness on a take ([ADR 0001](docs/adr/0001-clean-pass-stops-short-of-a-master.md));
@@ -20,13 +20,14 @@ the words below (*take*, *rig*, *stage*, *span*, *manifest*) are used precisely.
 takes ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match ──▶ prepped take
       ──▶ transcribe (WhisperX) ──▶ detect (wordlist) ──▶ manifest
       ──▶ splice tone ──▶ censored take ──▶ NLE
+NLE mixdown ──▶ master ──▶ mastered mp4 + feed mp3
 ```
 
 ## Environment
 
 Nix supplies everything — ffmpeg, the interpreter, and the Python stack. The
 dev shell takes its dependencies from the package itself, so what you develop
-against and what you install cannot drift.
+against and what you install cannot disagree.
 
 ```sh
 nix develop            # ffmpeg, just, python + deps
@@ -34,8 +35,16 @@ just                   # list tasks
 just test              # run the tests
 ```
 
-Inside the shell, `just` runs `python -m podio` against the working tree, so
-edits take effect immediately.
+Inside the shell, `PYTHONPATH` points at `src/`, so `python -m podio` runs the
+working tree and edits take effect immediately:
+
+```sh
+python -m podio --help
+nix develop ~/tech/podio -c python -m podio run   # from an episode directory
+```
+
+The justfile holds repo tasks only (`test`, `install`, `censor`): its recipes
+run in the repo, so episodes are worked on with `podio` itself.
 
 **Running it without installing.** The flake reference and the working
 directory are independent, which suits a tool that runs from an episode
@@ -63,13 +72,14 @@ That matters because podio reads loudness and per-window levels out of ffmpeg's
 human-readable stderr, so an upstream formatting change breaks parsing rather
 than the build. The version is not frozen — it follows whatever nixpkgs you
 build against — but `tests/test_end_to_end.py` runs against that exact binary
-during `nix build`, so drift fails the build instead of shipping. It is
+during `nix build`, so a change that breaks parsing fails the build instead of
+shipping. It is
 `ffmpeg-full` specifically, because that is the build carrying the OpenAL
 capture device that `podio bumper` records through — see
 [Why OpenAL, and not avfoundation](#why-openal-and-not-avfoundation).
 
 **Without nix.** `uv.lock` and `pyproject.toml` still describe a working
-environment: `uv sync`, then `PODIO="uv run podio" just <task>`. Nothing in CI
+environment: `uv sync`, then `uv run podio …`. Nothing in CI
 exercises that path, so treat it as untested.
 
 There is one environment and one interpreter. WhisperX is a hard dependency
@@ -407,7 +417,7 @@ Re-run after each change; it takes seconds.
 |---|---|
 | Steady hum, fan, aircon, traffic | `[takes.X.afftdn] enabled = true`. Raise `reduction_db` from 12 if it's still there. |
 | Room tone breathing between phrases | `[takes.X.gate] enabled = true` |
-| Gate chewing laughter or quiet words | Raise the offset: `threshold_db = "floor+8"`. Or lengthen `release_ms` past 250 so gaps inside a laugh don't each read as silence. |
+| Gate chewing laughter or quiet words | Lower the offset: `threshold_db = "floor+8"`. Or lengthen `release_ms` past 250 so gaps inside a laugh don't each read as silence. |
 | Noise `afftdn` can't shift | `[takes.X.rnnoise] enabled = true`. `model = "lq"` for ambient noise, `"bd"` for equipment hiss. Needs `$RNNOISE_MODELS` set. Listen for chewed laughter — it judges voice vs not-voice. |
 | Boomy, too much chest | `[takes.X.highpass] f = 100`, or an EQ band in the **rig** if it's always that way |
 | Harsh S sounds | `[takes.X.deesser] intensity = 0.6` |
@@ -426,7 +436,7 @@ than clipping. The message says how far under it landed. Either:
 - lower `working_level_db` until it clears (headroom is free on an intermediate), or
 - set `limiter = true` on that take, which lets it reach the target by shaving peaks.
 
-A few LU under the working level is harmless. Takes drifting apart from *each
+A few LU under the working level is harmless. Takes diverging from *each
 other* is what matters, and that only happens when one clamps and the other
 doesn't.
 

@@ -27,8 +27,8 @@ def transcribe_and_detect(
     Returns both artifacts: the full transcript (auditable record) and the
     manifest (the lean edit-list of spans to bleep). Detected spans below
     `min_confidence` are dropped (left for human review rather than bleeped
-    blindly); the rest pass through Stage 5 post-processing (inset, drop, merge)
-    before the manifest.
+    blindly); the rest are inset, dropped if collapsed, and merged
+    (`adjust.adjust_spans`) before the manifest.
     """
     words = transcriber.transcribe(audio_path)
     transcript = Transcript(audio_path=audio_path, words=list(words))

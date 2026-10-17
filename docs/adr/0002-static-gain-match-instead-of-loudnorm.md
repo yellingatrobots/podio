@@ -16,5 +16,5 @@ claim was false in practice.
 
 Clip safety becomes ours to provide, since a constant gain has none. Gain match is
 computed post-chain and clamped so the resulting true peak cannot exceed the peak
-ceiling; when the clamp bites the tool says so and the remedy is to enable the limiter
-stage or lower the working level.
+ceiling; when the clamp bites the tool says so and the remedy is to set `limiter = true`
+on the take or lower the working level.
