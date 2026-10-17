@@ -15,6 +15,19 @@ SINE_PEAK_OVER_RMS_DB = 3.0102999566398120
 #: against speech, nowhere near the peak ceiling, and not the loudest thing in
 #: the episode. Change it here if the working level ever moves.
 TONE_LEVEL_DB = -27.0
+#: Delivery loudness for the mastered mixdown: the podcast baseline (Apple
+#: Podcasts, AES TD1008). Unrelated to the working level, which takes keep.
+TARGET_LUFS = -16.0
+TRUE_PEAK_LIMIT_DB = -1.0
+#: AES TD1008's tolerance around the target.
+TARGET_TOLERANCE_LU = 1.0
+#: Where the master's limiter sits: half a dB under the true-peak limit, for
+#: the overshoot AAC and MP3 encoding add on top of it.
+LIMITER_CEILING_DB = -1.5
+#: How close a rendered master must come to the target before it is encoded.
+#: The limiter pulls integrated loudness down as it works — two units on raw
+#: speech — so the gain is corrected and the master rendered again until here.
+MASTER_SETTLED_LU = 0.2
 
 
 @dataclass(frozen=True)
@@ -101,3 +114,18 @@ def gain_match(
 
     allowed = peak_ceiling_db - measured.true_peak_db
     return GainMatch(gain_db=allowed, resulting_peak_db=peak_ceiling_db, clamped=True)
+
+
+def master_gain(integrated_lufs: float) -> float:
+    """Constant gain bringing a mixdown to the delivery loudness."""
+    return TARGET_LUFS - integrated_lufs
+
+
+def master_settled(integrated_lufs: float) -> bool:
+    return abs(integrated_lufs - TARGET_LUFS) <= MASTER_SETTLED_LU
+
+
+def meets_delivery(integrated_lufs: float, true_peak_db: float) -> bool:
+    """Whether an encoded master lands on target and under the peak limit."""
+    on_target = abs(integrated_lufs - TARGET_LUFS) <= TARGET_TOLERANCE_LU
+    return on_target and true_peak_db <= TRUE_PEAK_LIMIT_DB
