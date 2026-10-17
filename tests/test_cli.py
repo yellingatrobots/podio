@@ -56,3 +56,14 @@ def test_run_groups_its_options_by_step(help_text):
     clean, detect = options.split("step 1, clean:")[1].split("step 2, detect:")
     assert "--dry-run" in clean and "--min-confidence" not in clean
     assert "--min-confidence" in detect and "--dry-run" not in detect
+
+
+@pytest.mark.parametrize("command", [["run"], ["finish"], ["detect", "ian.wav"]])
+def test_where_whisperx_runs_is_asr_device_not_device(command):
+    assert build_parser().parse_args([*command, "--asr-device", "cuda"]).asr_device == "cuda"
+    with pytest.raises(SystemExit):
+        build_parser().parse_args([*command, "--device", "cuda"])
+
+
+def test_bumper_keeps_device_for_the_microphone():
+    assert build_parser().parse_args(["bumper", "--device", "2"]).device == "2"

@@ -150,7 +150,7 @@ def _cmd_bumper(args) -> int:
 def _cmd_detect(args) -> int:
     wordlist = WordList.from_file(args.wordlist)
     transcriber = WhisperXTranscriber(
-        model_size=args.model, device=args.device, language=args.language
+        model_size=args.model, device=args.asr_device, language=args.language
     )
 
     # Straight at the file: WhisperX decodes what its model needs, so converting
@@ -244,7 +244,7 @@ def _run_episode(args, output_dir: Path) -> tuple[int, list[Result]]:
                 args.wordlist or result.take.censor.wordlist or WORDLIST
             )
             transcriber = WhisperXTranscriber(
-                model_size=args.model, device=args.device, language=args.language
+                model_size=args.model, device=args.asr_device, language=args.language
             )
             manifest, spans = censor.detect_into(
                 result.output, output_dir, name, wordlist, transcriber,
@@ -420,7 +420,7 @@ def build_parser() -> argparse.ArgumentParser:
             help="WhisperX model (default base.en; large-v3 for higher accuracy)",
         )
         group.add_argument(
-            "--device", default="cpu",
+            "--asr-device", default="cpu",
             help="where WhisperX runs: cpu or cuda (default cpu)",
         )
         group.add_argument(
