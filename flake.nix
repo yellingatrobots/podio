@@ -11,11 +11,11 @@
       let
         pkgs = import nixpkgs {
           inherit system;
-          overlays = [ optunaFix ];
+          overlays = [ testFixes ];
         };
 
-        # whisperx pulls optuna in through pyannote-pipeline, and optuna fails
-        # tests of its own that nothing podio calls ever reaches.
+        # whisperx pulls optuna in through pyannote-pipeline, and optuna and
+        # plotly fail tests of their own that nothing podio calls ever reaches.
         #
         # The first three: two assert on logging handlers pytest's live-logging
         # installs, one on a visualization warning count.
@@ -26,8 +26,9 @@
         # 16 KiB-page kernel — Asahi here, macOS for the same reason. nixpkgs
         # disables exactly this list but guards it with isDarwin, which tests
         # the architecture instead of the page size, so Asahi runs them and 122
-        # parametrizations fail.
-        optunaFix = final: prev: {
+        # parametrizations fail. plotly's kaleido tests also fail on Asahi:
+        # "Failed to start Kaleido subprocess".
+        testFixes = final: prev: {
           pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
             (pyfinal: pyprev: {
               optuna = pyprev.optuna.overridePythonAttrs (old: {
@@ -50,6 +51,11 @@
                   "test_plot_rank"
                   "test_plot_slice"
                   "test_plot_terminator_improvement"
+                ];
+              });
+              plotly = pyprev.plotly.overridePythonAttrs (old: {
+                disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [
+                  "tests/test_optional/test_kaleido"
                 ];
               });
             })
