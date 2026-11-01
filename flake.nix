@@ -74,9 +74,13 @@
         # parser tests run against this exact binary at build time.
         ffmpeg = pkgs.ffmpeg-full;
 
+        # Read from the package, where hatch and --version also find it.
+        version = builtins.head (builtins.match ''.*__version__ = "([^"]+)".*''
+          (builtins.readFile ./src/podio/__init__.py));
+
         podio = python.pkgs.buildPythonApplication {
           pname = "podio";
-          version = "0.1.1";
+          inherit version;
           pyproject = true;
           src = ./.;
 
