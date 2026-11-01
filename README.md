@@ -39,23 +39,28 @@ nix run github:yellingatrobots/podio -- --version
 
 ## Environment
 
-Nix supplies ffmpeg, the interpreter, and the Python packages. The development
-shell takes its dependencies from the package, thus the development
-environment and the installed tool stay the same.
+`uv.lock` sets the version of each Python package. uv installs from it, and
+the flake builds from it (with uv2nix), thus the two environments have the
+same packages. Nix supplies only the interpreter, ffmpeg, and the tools.
+Refer to [ADR 0004](docs/adr/0004-uv-lock-is-the-dependency-source.md).
 
 ```sh
-nix develop            # ffmpeg, just, python and the dependencies
+nix develop            # ffmpeg, just, uv, python and the dependencies
 just                   # shows the tasks
 just test              # does the tests
 ```
 
-In the shell, `PYTHONPATH` points to `src/`, thus `python -m podio` operates
-the working tree. Your changes are immediately in operation:
+In the shell, `podio` is an editable installation of `src/`, thus `podio`
+operates the working tree. Your changes are immediately in operation:
 
 ```sh
-python -m podio --help
-nix develop ~/tech/podio -c python -m podio run   # from a directory of an episode
+podio --help
+nix develop ~/tech/podio -c podio run   # from a directory of an episode
 ```
+
+To add a dependency, do `uv add NAME` in the shell. uv changes `pyproject.toml`
+and `uv.lock`, and direnv builds the shell again. If a Linux build then stops
+with a missing `.so` library, add the library to `fixups` in `flake.nix`.
 
 The justfile has only the tasks of the repository (`test`, `install`,
 `censor`). Its recipes operate in the repository. For an episode, use `podio`.
@@ -85,8 +90,8 @@ that `PATH` is the ffmpeg of the machine.
 podio reads the loudness and the window levels from the stderr text of ffmpeg.
 A new format of that text can stop the parser. The version is not frozen: it
 follows the nixpkgs input. But `tests/test_end_to_end.py` operates against that
-exact binary during `nix build`. A change in the output of ffmpeg thus stops
-the build.
+exact binary during `nix flake check`. A change in the output of ffmpeg thus
+stops the check.
 
 The package is `ffmpeg-full`, because this build has the OpenAL capture device.
 `podio bumper` records through it.
@@ -119,11 +124,22 @@ no sound hardware.
 
 ### Without nix
 
-`uv.lock` and `pyproject.toml` also give a correct environment: do `uv sync`,
-then `uv run podio …`. No test operates this path. Thus do
-not rely on it.
+uv uses the same `uv.lock` as nix, thus the packages are the same:
 
-There is one environment and one interpreter. WhisperX is a necessary
+```sh
+uv sync                # makes .venv from uv.lock
+uv run podio --help
+uv run pytest -q
+uv tool install .      # puts podio on the PATH
+```
+
+uv cannot supply ffmpeg. Install an ffmpeg with the OpenAL capture device, or
+set `PODIO_FFMPEG` to the path of one. The lock has three platforms: macOS on
+Apple silicon, and Linux on aarch64 and x86_64. On Linux, torch is the CPU-only
+build, thus `--asr-device cuda` does not operate.
+
+There is one environment and one interpreter (Python 3.12, in
+`.python-version`). WhisperX is a necessary
 dependency (approximately 1.1 GB, mostly torch), because the censor function is
 part of the pass. The first detection downloads the model data (approximately
 141 MB for the default `base.en`). Subsequent detections do not use the
@@ -147,8 +163,7 @@ network.
   constant gain. It does not use `loudnorm` — refer to
   [ADR 0002](docs/adr/0002-static-gain-match-instead-of-loudnorm.md).
 - **The version is in one file.** `src/podio/__init__.py` holds `__version__`,
-  and hatchling reads it from there. `flake.nix` has its own copy: change the
-  two files together.
+  and hatchling and `flake.nix` read it from there.
 
 ## Example — episode 16
 

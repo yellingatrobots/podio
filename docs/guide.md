@@ -39,6 +39,15 @@ in the directory of the source:
 nix profile install .
 ```
 
+Without nix, use uv in the directory of the source:
+
+```sh
+uv tool install .
+```
+
+This installation does not include ffmpeg. Install ffmpeg with the OpenAL
+capture device, or set `PODIO_FFMPEG` to the path of an ffmpeg.
+
 podio needs the model data of WhisperX. The first detection downloads
 approximately 141 MB. Subsequent detections do not use the network.
 
