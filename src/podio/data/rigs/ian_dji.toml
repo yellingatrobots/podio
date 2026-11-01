@@ -1,0 +1,52 @@
+# Ian — dynamic mic.
+#
+# The full chain in order. Stages that depend on conditions rather than on the
+# rig are listed here but switched off; an episode turns on what that recording
+# actually needs. Levels are dB throughout; "floor" means this take's measured
+# noise floor.
+
+[[stage]]
+name = "highpass"
+f = 80
+
+# Steady broadband noise — a fan, HVAC, traffic. Off unless the room had some.
+[[stage]]
+name = "afftdn"
+enabled = false
+noise_floor_db = "floor"
+reduction_db = 12
+
+# Neural denoiser. Judges voice vs not-voice, so it can chew laughter — prefer
+# afftdn for steady noise and reach for this only when that isn't enough.
+# Models: lq = ambient noise, bd = equipment hiss.
+[[stage]]
+name = "rnnoise"
+enabled = false
+model = "lq"
+
+[[stage]]
+name = "gate"
+enabled = false
+threshold_db = "floor+12"
+range_db = -40
+ratio = 6
+attack_ms = 5
+release_ms = 250
+
+[[stage]]
+name = "eq"
+enabled = false
+bands = []
+
+[[stage]]
+name = "compressor"
+threshold_db = -18
+ratio = 3
+attack_ms = 5
+release_ms = 60
+
+[[stage]]
+name = "deesser"
+intensity = 0.4
+frequency = 0.5
+max_reduction = 0.5
