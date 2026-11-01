@@ -1,14 +1,12 @@
 # Repo tasks: install, test, and a one-shot censor demo. Recipes run in this
 # directory, so episodes are worked on with `podio` itself, not through here.
-# Run everything inside the nix dev shell:  nix develop -c just <task>
 #
-# nix supplies ffmpeg, just, the interpreter and every Python dependency —
-# the same ones the installed tool is built from.
+# Recipes go through `uv run`, which works the same with or without nix: in
+# the nix dev shell it uses the shell's venv, elsewhere it syncs .venv from
+# uv.lock. Either way podio runs the working tree.
 
-# How podio is invoked. The default runs this working tree against the dev
-# shell's dependencies. Without nix, podio runs as `uv run podio …`; set
-# PODIO="uv run podio" for the recipes that call it.
-podio := env_var_or_default("PODIO", "python -m podio")
+# How podio is invoked; override with PODIO.
+podio := env_var_or_default("PODIO", "uv run podio")
 
 # Show available tasks
 default:
@@ -25,7 +23,7 @@ install:
 
 # Run the tests
 test:
-    pytest -q
+    uv run pytest -q
 
 # e.g. `just censor test_audio/profanity.m4a`. Fast model by default.
 #
