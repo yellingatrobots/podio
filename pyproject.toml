@@ -2,13 +2,19 @@
 name = "podio"
 dynamic = ["version"]
 description = "Clean and censor an episode's takes into NLE-ready audio"
-requires-python = ">=3.12"
+requires-python = "==3.12.*"
 # whisperx is not optional: censoring is part of the pass, not an add-on.
 # It brings torch with it — about 1.1 GB installed, which is the price of
 # detection running locally and offline once the weights are cached.
 dependencies = [
     "pydantic>=2",
-    "whisperx",
+    "whisperx>=3.8.6",
+    # Not imported by podio. Listed so [tool.uv.sources] can select their
+    # index, which uv applies only to direct dependencies; whisperx sets the
+    # versions.
+    "torch",
+    "torchaudio",
+    "torchvision",
 ]
 
 [project.scripts]
@@ -16,6 +22,27 @@ podio = "podio.cli:main"
 
 [dependency-groups]
 dev = ["pytest"]
+
+# uv.lock is the one source of dependency versions: uv installs from it, and
+# the flake builds from it. The lock covers only the platforms the flake builds.
+[tool.uv]
+required-version = ">=0.13.4"
+environments = [
+    "sys_platform == 'darwin' and platform_machine == 'arm64'",
+    "sys_platform == 'linux' and platform_machine == 'aarch64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
+
+# CPU-only torch on Linux: PyPI's x86_64 wheels pull in several GB of CUDA.
+[[tool.uv.index]]
+name = "pytorch-cpu"
+url = "https://download.pytorch.org/whl/cpu"
+explicit = true
+
+[tool.uv.sources]
+torch = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchaudio = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
+torchvision = [{ index = "pytorch-cpu", marker = "sys_platform == 'linux'" }]
 
 [build-system]
 requires = ["hatchling"]
