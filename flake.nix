@@ -37,17 +37,36 @@
 
         # Linux wheels go through autoPatchelf; these are the ones it cannot
         # satisfy by itself.
-        fixups = final: prev: {
-          # Published only as an sdist, with no build system in the lock.
-          antlr4-python3-runtime = prev.antlr4-python3-runtime.overrideAttrs (old: {
-            nativeBuildInputs = old.nativeBuildInputs ++ final.resolveBuildSystem { setuptools = [ ]; };
-          });
-          # whisperx requires triton on x86_64 Linux. libcuda comes from a GPU
-          # driver, and these builds run on the CPU.
-          triton = prev.triton.overrideAttrs (old: {
-            autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
-          });
-        };
+        fixups = final: prev:
+          let
+            # libtorch ships inside the torch wheel, not in a lib/ directory
+            # autoPatchelf searches.
+            linkLibtorch = old: lib.optionalAttrs pkgs.stdenv.isLinux {
+              preFixup = (old.preFixup or "") + ''
+                addAutoPatchelfSearchPath ${final.torch}/${python.sitePackages}/torch/lib
+              '';
+            };
+          in {
+            # Published only as an sdist, with no build system in the lock.
+            antlr4-python3-runtime = prev.antlr4-python3-runtime.overrideAttrs (old: {
+              nativeBuildInputs = old.nativeBuildInputs ++ final.resolveBuildSystem { setuptools = [ ]; };
+            });
+            # whisperx requires triton on x86_64 Linux. libcuda comes from a GPU
+            # driver, and these builds run on the CPU.
+            triton = prev.triton.overrideAttrs (old: {
+              autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
+            });
+            # pyannote requires it, but podio never decodes through it; see
+            # _without_torchcodec_warning in transcribe.py.
+            torchcodec = prev.torchcodec.overrideAttrs (old: {
+              autoPatchelfIgnoreMissingDeps = true;
+            });
+            # Its FFmpeg and sox backends load only on demand, and podio uses neither.
+            torchaudio = prev.torchaudio.overrideAttrs (old: linkLibtorch old // {
+              autoPatchelfIgnoreMissingDeps = [ "libav*" "libsw*" "libsox.so" ];
+            });
+            torchvision = prev.torchvision.overrideAttrs linkLibtorch;
+          };
 
         pythonSet = (pkgs.callPackage pyproject-nix.build.packages { inherit python; }).overrideScope
           (lib.composeManyExtensions [
