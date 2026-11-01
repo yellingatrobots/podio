@@ -6,7 +6,8 @@
 # the same ones the installed tool is built from.
 
 # How podio is invoked. The default runs this working tree against the dev
-# shell's dependencies. Without nix:  PODIO="uv run podio" just <task>
+# shell's dependencies. Without nix, podio runs as `uv run podio …`; set
+# PODIO="uv run podio" for the recipes that call it.
 podio := env_var_or_default("PODIO", "python -m podio")
 
 # Show available tasks
