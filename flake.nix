@@ -4,121 +4,132 @@
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
     flake-utils.url = "github:numtide/flake-utils";
+
+    pyproject-nix = {
+      url = "github:pyproject-nix/pyproject.nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    uv2nix = {
+      url = "github:pyproject-nix/uv2nix";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    pyproject-build-systems = {
+      url = "github:pyproject-nix/build-system-pkgs";
+      inputs.pyproject-nix.follows = "pyproject-nix";
+      inputs.uv2nix.follows = "uv2nix";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
   };
 
-  outputs = { self, nixpkgs, flake-utils }:
-    flake-utils.lib.eachDefaultSystem (system:
+  outputs = { self, nixpkgs, flake-utils, pyproject-nix, uv2nix, pyproject-build-systems }:
+    # The platforms uv.lock resolves for; see [tool.uv] in pyproject.toml.
+    flake-utils.lib.eachSystem [ "aarch64-darwin" "aarch64-linux" "x86_64-linux" ] (system:
       let
-        pkgs = import nixpkgs {
-          inherit system;
-          overlays = [ testFixes ];
+        pkgs = nixpkgs.legacyPackages.${system};
+        inherit (nixpkgs) lib;
+
+        # uv.lock sets every Python package version; nixpkgs supplies only the
+        # interpreter, ffmpeg and the tools. uv reads the same .python-version.
+        python = pkgs."python${lib.replaceStrings [ "." ] [ "" ] (lib.fileContents ./.python-version)}";
+
+        workspace = uv2nix.lib.workspace.loadWorkspace { workspaceRoot = ./.; };
+
+        # Linux wheels go through autoPatchelf; these are the ones it cannot
+        # satisfy by itself.
+        fixups = final: prev: {
+          # Published only as an sdist, with no build system in the lock.
+          antlr4-python3-runtime = prev.antlr4-python3-runtime.overrideAttrs (old: {
+            nativeBuildInputs = old.nativeBuildInputs ++ final.resolveBuildSystem { setuptools = [ ]; };
+          });
+          # whisperx requires triton on x86_64 Linux. libcuda comes from a GPU
+          # driver, and these builds run on the CPU.
+          triton = prev.triton.overrideAttrs (old: {
+            autoPatchelfIgnoreMissingDeps = [ "libcuda.so.1" ];
+          });
         };
 
-        # whisperx pulls optuna in through pyannote-pipeline, and optuna and
-        # plotly fail tests of their own that nothing podio calls ever reaches.
-        #
-        # The first three: two assert on logging handlers pytest's live-logging
-        # installs, one on a visualization warning count.
-        #
-        # The rest are every test that renders a figure. Those export through
-        # kaleido 0.2.1, a prebuilt wheel wrapping a vendored Chromium whose
-        # PT_LOAD segments are 4 KiB-aligned, so it segfaults at exec on a
-        # 16 KiB-page kernel — Asahi here, macOS for the same reason. nixpkgs
-        # disables exactly this list but guards it with isDarwin, which tests
-        # the architecture instead of the page size, so Asahi runs them and 122
-        # parametrizations fail. plotly's kaleido tests also fail on Asahi:
-        # "Failed to start Kaleido subprocess".
-        testFixes = final: prev: {
-          pythonPackagesExtensions = prev.pythonPackagesExtensions ++ [
-            (pyfinal: pyprev: {
-              optuna = pyprev.optuna.overridePythonAttrs (old: {
-                disabledTests = (old.disabledTests or [ ]) ++ [
-                  "test_default_handler"
-                  "test_propagation"
-                  "test_filter_inf_trials_message"
-
-                  "test_edf_plot_no_trials"
-                  "test_edf_plot_no_trials_studies"
-                  "test_get_optimization_history_plot"
-                  "test_get_timeline_plot"
-                  "test_plot_contour"
-                  "test_plot_edf_with_multiple_studies"
-                  "test_plot_edf_with_target"
-                  "test_plot_edf_with_target_name"
-                  "test_plot_intermediate_values"
-                  "test_plot_parallel_coordinate"
-                  "test_plot_param_importances"
-                  "test_plot_rank"
-                  "test_plot_slice"
-                  "test_plot_terminator_improvement"
-                ];
-              });
-              plotly = pyprev.plotly.overridePythonAttrs (old: {
-                disabledTestPaths = (old.disabledTestPaths or [ ]) ++ [
-                  "tests/test_optional/test_kaleido"
-                ];
-              });
-            })
-          ];
-        };
-
-        # Shared by the package and the dev shell, so both resolve one dep set.
-        python = pkgs.python3;
+        pythonSet = (pkgs.callPackage pyproject-nix.build.packages { inherit python; }).overrideScope
+          (lib.composeManyExtensions [
+            pyproject-build-systems.overlays.default
+            (workspace.mkPyprojectOverlay { sourcePreference = "wheel"; })
+            fixups
+          ]);
 
         # ffmpeg-full carries the OpenAL capture device, and OpenAL is the only
         # input podio records through. avfoundation, the obvious macOS
         # alternative, loses 11-17% of what it captures — see capture.py.
         #
         # The version follows whatever nixpkgs the consumer supplies. podio
-        # scrapes ffmpeg's stderr, so it is a check input below: the end-to-end
-        # parser tests run against this exact binary at build time.
+        # scrapes ffmpeg's stderr, so the pytest check below runs the
+        # end-to-end parser tests against this exact binary.
         ffmpeg = pkgs.ffmpeg-full;
 
-        # Read from the package, where hatch and --version also find it.
+        inherit (pkgs.callPackages pyproject-nix.build.util { }) mkApplication;
+
+        # The version is dynamic, so uv.lock has none; read it where hatch and
+        # --version do.
         version = builtins.head (builtins.match ''.*__version__ = "([^"]+)".*''
           (builtins.readFile ./src/podio/__init__.py));
 
-        podio = python.pkgs.buildPythonApplication {
-          pname = "podio";
+        podio = (mkApplication {
+          venv = pythonSet.mkVirtualEnv "podio-env" workspace.deps.default;
+          package = pythonSet.podio;
           inherit version;
-          pyproject = true;
-          src = ./.;
-
-          build-system = [ python.pkgs.hatchling ];
-          dependencies = with python.pkgs; [ pydantic whisperx ];
-
-          # tests/test_end_to_end.py skips itself when ffmpeg is off PATH, so
-          # dropping ffmpeg here turns the parser check into a no-op.
-          nativeCheckInputs = [ python.pkgs.pytestCheckHook ffmpeg ];
-
+        }).overrideAttrs (old: {
+          nativeBuildInputs = old.nativeBuildInputs ++ [ pkgs.makeWrapper ];
           # Baked in at build time, so it cannot go stale the way a generated
           # wrapper does after `nix flake update`.
-          makeWrapperArgs = [ "--set" "PODIO_FFMPEG" "${ffmpeg}/bin/ffmpeg" ];
-
-          meta = {
+          postInstall = ''
+            wrapProgram $out/bin/podio --set PODIO_FFMPEG ${ffmpeg}/bin/ffmpeg
+          '';
+          meta = old.meta // {
             description = "Clean and censor an episode's takes into NLE-ready audio";
             mainProgram = "podio";
           };
+        });
+
+        # tests/test_end_to_end.py skips itself when ffmpeg is off PATH, so
+        # dropping ffmpeg here turns the parser check into a no-op.
+        pytest = pkgs.stdenv.mkDerivation {
+          name = "podio-pytest";
+          src = ./.;
+          nativeBuildInputs = [ (pythonSet.mkVirtualEnv "podio-test-env" workspace.deps.all) ffmpeg ];
+          dontConfigure = true;
+          buildPhase = ''
+            export HOME=$TMPDIR
+            pytest -q -p no:cacheprovider
+          '';
+          installPhase = "touch $out";
         };
+
+        # podio is installed editable from $REPO_ROOT/src, so `podio` runs the
+        # working tree. uv is here to edit uv.lock, never to make a .venv.
+        devVenv = (pythonSet.overrideScope (lib.composeManyExtensions [
+          (workspace.mkEditablePyprojectOverlay { root = "$REPO_ROOT"; })
+          # hatchling builds an editable install only with editables present.
+          (final: prev: {
+            podio = prev.podio.overrideAttrs (old: {
+              nativeBuildInputs = old.nativeBuildInputs ++ final.resolveBuildSystem { editables = [ ]; };
+            });
+          })
+        ])).mkVirtualEnv "podio-dev-env" workspace.deps.all;
       in {
         packages.default = podio;
+        checks.default = pytest;
 
-        # `inputsFrom` gives the shell podio's own dependency closure, so the
-        # shell and the installed tool cannot disagree. podio itself is absent:
-        # PYTHONPATH lets `python -m podio` run the working tree.
-        #
-        # uv.lock still describes a `uv sync` for anyone without nix, then
-        # `uv run podio`. Nothing here exercises that path.
         devShells.default = pkgs.mkShell {
-          inputsFrom = [ podio ];
-          packages = [
-            ffmpeg
-            pkgs.just
-            python.pkgs.pytest
-          ];
-
+          packages = [ devVenv pkgs.uv ffmpeg pkgs.just ];
+          env = {
+            UV_NO_SYNC = "1";
+            UV_PYTHON = "${devVenv}/bin/python";
+            # `uv run` here uses the shell's venv, never a .venv from `uv sync`.
+            UV_PROJECT_ENVIRONMENT = "${devVenv}";
+            UV_PYTHON_DOWNLOADS = "never";
+          };
           shellHook = ''
-            export PYTHONPATH="$PWD/src''${PYTHONPATH:+:$PYTHONPATH}"
+            unset PYTHONPATH
+            export REPO_ROOT=$(git rev-parse --show-toplevel)
             echo "podio dev shell — run 'just' to see tasks"
           '';
         };

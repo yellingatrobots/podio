@@ -26,7 +26,7 @@ dev = ["pytest"]
 # uv.lock is the one source of dependency versions: uv installs from it, and
 # the flake builds from it. The lock covers only the platforms the flake builds.
 [tool.uv]
-required-version = ">=0.13.4"
+required-version = ">=0.11"
 environments = [
     "sys_platform == 'darwin' and platform_machine == 'arm64'",
     "sys_platform == 'linux' and platform_machine == 'aarch64'",
