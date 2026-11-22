@@ -41,7 +41,7 @@
           let
             # libtorch ships inside the torch wheel, not in a lib/ directory
             # autoPatchelf searches.
-            linkLibtorch = old: lib.optionalAttrs pkgs.stdenv.isLinux {
+            linkLibtorch = old: lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {
               preFixup = (old.preFixup or "") + ''
                 addAutoPatchelfSearchPath ${final.torch}/${python.sitePackages}/torch/lib
               '';
