@@ -10,7 +10,7 @@ import sys
 import textwrap
 from pathlib import Path
 
-from . import __version__, capture, censor, config, ffmpeg, master
+from . import __version__, capture, censor, config, ffmpeg, master, prep
 from .bleep import render_file
 from .clean import Result, clean_all, clean_episode, report, select_takes
 from .config import scaffold
@@ -25,6 +25,30 @@ from .wordlist import WordList
 DATA = Path(__file__).resolve().parent / "data"
 WORDLIST = DATA / "wordlist.toml"
 RIGS = DATA / "rigs"
+
+
+def _cmd_prep(args) -> int:
+    """Prep every file given: validated together, then run independently."""
+    try:
+        jobs = prep.plan(
+            args.files,
+            rigs=args.rigs,
+            bleep=not args.no_bleep,
+            wordlist=args.wordlist,
+            default_wordlist=WORDLIST,
+            model=args.model,
+            rnnoise_models=args.models,
+            keep_temp=args.keep_temp,
+        )
+    except ValueError as error:
+        report(f"error: {error}")
+        return 1
+
+    failed = prep.run(jobs, args.jobs or len(jobs))
+    if failed:
+        report(f"error: {failed} of {len(jobs)} file(s) failed")
+        return 1
+    return 0
 
 
 def _cmd_normalize(args) -> int:
@@ -446,6 +470,48 @@ def build_parser() -> argparse.ArgumentParser:
             action="store_true",
             help="detect again over manifests edited by hand, losing the edits",
         )
+
+    p_prep = command(
+        "prep",
+        """
+        make each FILE ready for production.
+
+          NAME.mp4 or NAME.wav
+            1  clean   the rig's chain, at 48 kHz
+            2  level   -16 LUFS integrated, under -1 dBTP
+            3  detect  transcribe (WhisperX), match the wordlist
+            4  bleep   a tone over each word found
+          ──▶ NAME_prepped.mp4 (picture copied, 192 kbps AAC)
+              or NAME_prepped.wav (24-bit, 48 kHz)
+
+        A NAME.wav beside NAME.mp4 is the audio; the mp4 then only gives the
+        picture. The rig is the one named NAME, unless an audio.toml beside
+        the file says [takes.NAME] rig = "...". Every file is checked before
+        any work starts; then they run in parallel, and one failing does not
+        stop the others. Intermediates go to a temporary directory.
+        """,
+    )
+    p_prep.add_argument("files", nargs="+", type=Path, metavar="FILE",
+                        help="an .mp4 (or other video) or a .wav")
+    p_prep.add_argument("--no-bleep", action="store_true",
+                        help="skip steps 3 and 4: nothing is transcribed or bleeped")
+    p_prep.add_argument("-j", "--jobs", type=int, default=None, metavar="N",
+                        help="files to prep at once (default: all of them)")
+    p_prep.add_argument("--keep-temp", type=Path, default=None, metavar="DIR",
+                        help="keep the intermediates of each file in DIR/NAME")
+    p_prep.add_argument("--model", default="base.en",
+                        help="WhisperX model (default base.en; large-v3 for "
+                             "higher accuracy)")
+    p_prep.add_argument("--wordlist", type=Path, default=None,
+                        help="wordlist to bleep (default: audio.toml's [censor] "
+                             "wordlist, else the one podio ships)")
+    p_prep.add_argument("--rnnoise-models", dest="models", type=Path,
+                        default=Path(os.environ.get("RNNOISE_MODELS", "")),
+                        help="directory of .rnnn files for rnnoise "
+                             "(default: $RNNOISE_MODELS)")
+    p_prep.add_argument("--rigs", type=Path, default=RIGS,
+                        help="directory of rig files (default: the rigs podio ships)")
+    p_prep.set_defaults(func=_cmd_prep)
 
     p_run = command(
         "run",
