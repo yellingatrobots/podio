@@ -36,6 +36,8 @@ FLOOR_PERCENTILE = 0.10
 SILENCE_LIMIT_DB = -100.0
 INTEGRATED = re.compile(r"^\s+I:\s*(-?[\d.]+) LUFS", re.MULTILINE)
 TRUE_PEAK = re.compile(r"^\s+Peak:\s*(-?[\d.]+) dBFS", re.MULTILINE)
+#: "Stream #0:0...: Video: h264 ..., 29.97 fps, 29.97 tbr, ..."
+FRAME_RATE = re.compile(r"Stream #.*: Video: .*?, ([\d.]+) fps")
 #: Containers that hold PCM, so a finished WAV can be muxed in untouched. MP4
 #: is not one of them in any player worth relying on.
 PCM_CONTAINERS = {".mov", ".mkv"}
@@ -92,6 +94,19 @@ def parse_loudness(output: str) -> tuple[float, float]:
     if not integrated or not peak:
         raise ValueError("ffmpeg reported no loudness summary")
     return float(integrated[-1]), float(peak[-1])
+
+
+def parse_frame_rate(output: str) -> float:
+    """The frame rate of the first video stream ffmpeg describes."""
+    match = FRAME_RATE.search(output)
+    if not match:
+        raise ValueError("ffmpeg reported no video stream with a frame rate")
+    return float(match.group(1))
+
+
+def frame_rate(video: Path) -> float:
+    # With no output named, ffmpeg describes its input and then fails.
+    return parse_frame_rate(probe([executable(), "-hide_banner", "-i", str(video)]))
 
 
 def _base(source: Path) -> list[str]:
@@ -296,13 +311,25 @@ def level_command(source: Path, gain_db: float, destination: Path) -> list[str]:
     ]
 
 
-def encode_video_command(video: Path, audio: Path, destination: Path) -> list[str]:
-    """Put finished audio over `video`'s picture, untouched, encoded to AAC."""
+def encode_video_command(
+    video: Path, audio: Path, destination: Path, audio_delay_s: float = 0.0
+) -> list[str]:
+    """Put finished audio over `video`'s picture, untouched, encoded to AAC.
+
+    A positive `audio_delay_s` holds the audio back behind silence; a negative
+    one cuts its head. -shortest keeps the result as long as the picture.
+    """
+    shift = []
+    if audio_delay_s > 0:
+        shift = ["-af", f"adelay=delays={audio_delay_s * 1000:g}:all=1"]
+    elif audio_delay_s < 0:
+        shift = ["-af", f"atrim=start={-audio_delay_s:g},asetpts=PTS-STARTPTS"]
     return [
         executable(), "-hide_banner", "-y",
         "-i", str(video),
         "-i", str(audio),
         "-map", "0:v?", "-map", "1:a", "-map_metadata", "0",
+        *shift,
         "-c:v", "copy", "-c:a", "aac", "-b:a", VIDEO_AUDIO_BITRATE,
         "-movflags", "+faststart",
         "-shortest",

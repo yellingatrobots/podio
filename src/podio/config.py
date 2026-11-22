@@ -15,7 +15,7 @@ from typing import Any
 EPISODE_CONFIG = "audio.toml"
 EPISODE_KEYS = {"censor", "takes"}
 CENSOR_KEYS = {"wordlist"}
-TAKE_KEYS = {"rig"}
+TAKE_KEYS = {"rig", "audio_delay_frames"}
 #: Take sub-tables that configure something other than a stage of the chain,
 #: and so must not be matched against the rig's stage names.
 NON_STAGE_TABLES = {"censor"}
@@ -37,6 +37,9 @@ class Take:
     source: Path
     chain: list[Spec]
     censor: Censor
+    #: Frames to hold the audio back against the picture; negative brings it
+    #: forward. Corrects a rig whose audio runs ahead of its video.
+    audio_delay_frames: int = 0
 
 
 def merge_chain(rig_chain: list[Spec], overrides: dict[str, Spec]) -> list[Spec]:
@@ -93,13 +96,22 @@ def load_take(media: Path, rigs_dir: Path) -> Take:
         k: v for k, v in table.items() if isinstance(v, dict) and k not in NON_STAGE_TABLES
     }
 
+    rig = tomllib.loads(rig_path.read_text())
+    delay = table.get("audio_delay_frames", rig.get("audio_delay_frames", 0))
+    if type(delay) is not int:
+        raise ValueError(
+            f"audio_delay_frames for {media.name} must be a whole number of "
+            f"frames, not {delay!r}"
+        )
+
     wav = media.with_suffix(".wav")
     censor = _load_censor(censor_table, Censor(), directory)
     return Take(
         name=name,
         source=wav if wav.exists() else media,
-        chain=merge_chain(tomllib.loads(rig_path.read_text()).get("stage", []), overrides),
+        chain=merge_chain(rig.get("stage", []), overrides),
         censor=_load_censor(take_censor, censor, directory),
+        audio_delay_frames=delay,
     )
 
 

@@ -115,10 +115,21 @@ def prep_one(job: Job) -> Path:
             audio = censor.splice(audio, manifest, work, name)
         write_sidecar(work / "audio_analysis.toml", [result])
 
+        frames = job.take.audio_delay_frames
         if job.media.suffix.lower() == ".wav":
+            if frames:
+                report(
+                    f"{name:6} audio_delay_frames = {frames} not applied: "
+                    f"{job.media.name} has no picture to sync to"
+                )
             shutil.copyfile(audio, job.output)
         else:
-            ffmpeg.run(ffmpeg.encode_video_command(job.media, audio, job.output))
+            delay = frames / ffmpeg.frame_rate(job.media) if frames else 0.0
+            if frames:
+                report(f"{name:6} audio delayed {frames} frame(s), {delay * 1000:+.1f} ms")
+            ffmpeg.run(ffmpeg.encode_video_command(
+                job.media, audio, job.output, audio_delay_s=delay
+            ))
     # Encoding moves the true peak; the limiter's half-dB margin should absorb
     # it, and this says so when it has not.
     delivered = measure(job.output)

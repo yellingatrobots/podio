@@ -34,9 +34,15 @@ _Avoid_: input, source, mic, interface, channel
 
 **Rig**:
 A speaker's stable recording setup — the microphone and its consistent tonal
-consequences. Belongs to the speaker across episodes, and is deliberately
+consequences, and the camera's audio delay. Belongs to the speaker across episodes, and is deliberately
 distinct from the conditions a take was recorded under.
 _Avoid_: profile, preset, setup
+
+**Audio Delay**:
+How many frames a take's audio is held back against its picture when podio
+writes a video; negative brings it forward. Set by the rig, because a camera's
+audio and picture fall out of sync by the same amount every episode.
+_Avoid_: offset, sync, latency
 
 **Conditions**:
 Everything about a take that varies between episodes rather than persisting with

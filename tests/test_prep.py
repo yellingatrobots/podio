@@ -182,3 +182,34 @@ def test_files_run_in_parallel_processes(episode):
     assert prep(episode, "--no-bleep", str(episode / "ian.wav"), str(episode / "josh.wav")) == 0
     assert (episode / "ian_prepped.wav").exists()
     assert (episode / "josh_prepped.wav").exists()
+
+
+def max_volume_of_head(path: Path, seconds: float) -> float:
+    output = ffmpeg.run(
+        ["ffmpeg", "-hide_banner", "-nostats", "-t", str(seconds), "-i", str(path),
+         "-af", "volumedetect", "-f", "null", "-"]
+    )
+    return float(output.split("max_volume:")[1].split("dB")[0])
+
+
+def test_a_rig_s_audio_delay_holds_the_audio_back_by_whole_frames(episode):
+    (episode.parent / "rigs" / "josh.toml").write_text("audio_delay_frames = 3\n" + RIG)
+    make_video(episode / "josh.mp4")  # 15 fps: 3 frames are 0.2 s
+
+    assert prep(episode, "--no-bleep", str(episode / "josh.mp4")) == 0
+
+    out = episode / "josh_prepped.mp4"
+    assert max_volume_of_head(out, 0.15) < -60
+    assert max_volume_of_head(episode / "josh.mp4", 0.15) > -40
+
+
+def test_a_wav_has_no_picture_to_sync_so_the_delay_is_reported_not_applied(
+    episode, capsys
+):
+    (episode.parent / "rigs" / "josh.toml").write_text("audio_delay_frames = 3\n" + RIG)
+    make_take(episode / "josh.wav")
+
+    assert prep(episode, "--no-bleep", str(episode / "josh.wav")) == 0
+
+    assert max_volume_of_head(episode / "josh_prepped.wav", 0.15) > -40
+    assert "audio_delay_frames" in capsys.readouterr().err

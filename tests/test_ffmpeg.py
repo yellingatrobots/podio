@@ -9,6 +9,7 @@ from podio.ffmpeg import (
     level_command,
     measure_command,
     executable,
+    parse_frame_rate,
     parse_loudness,
     parse_noise_floor,
     render_command,
@@ -157,3 +158,43 @@ def test_the_prepped_video_copies_the_picture_and_encodes_aac():
     assert cmd[cmd.index("-c:a") + 1] == "aac"
     assert "+faststart" in cmd
     assert cmd[-1] == "out.mp4"
+
+
+STREAMS = """\
+Input #0, mov,mp4,m4a,3gp,3g2,mj2, from 'josh.mp4':
+  Stream #0:0[0x1](und): Video: h264 (High) (avc1 / 0x31637661), yuv420p(progressive), 1920x1080 [SAR 1:1 DAR 16:9], 8012 kb/s, 29.97 fps, 29.97 tbr, 30k tbn (default)
+  Stream #0:1[0x2](und): Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp, 128 kb/s (default)
+"""
+
+
+def test_the_frame_rate_is_read_from_the_video_stream():
+    assert parse_frame_rate(STREAMS) == pytest.approx(29.97)
+
+
+def test_a_file_with_no_video_stream_has_no_frame_rate():
+    audio_only = "\n".join(l for l in STREAMS.splitlines() if "Video" not in l)
+    with pytest.raises(ValueError, match="frame rate"):
+        parse_frame_rate(audio_only)
+
+
+def _audio_filter(cmd):
+    return cmd[cmd.index("-af") + 1] if "-af" in cmd else None
+
+
+def test_the_prepped_video_leaves_the_audio_where_it_is_by_default():
+    cmd = encode_video_command(Path("ep.mp4"), Path("a.wav"), Path("out.mp4"))
+    assert _audio_filter(cmd) is None
+
+
+def test_a_positive_delay_holds_the_audio_back_with_silence():
+    cmd = encode_video_command(
+        Path("ep.mp4"), Path("a.wav"), Path("out.mp4"), audio_delay_s=0.1335
+    )
+    assert _audio_filter(cmd) == "adelay=delays=133.5:all=1"
+
+
+def test_a_negative_delay_cuts_the_head_of_the_audio():
+    cmd = encode_video_command(
+        Path("ep.mp4"), Path("a.wav"), Path("out.mp4"), audio_delay_s=-0.1
+    )
+    assert _audio_filter(cmd) == "atrim=start=0.1,asetpts=PTS-STARTPTS"

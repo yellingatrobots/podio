@@ -2,6 +2,11 @@
 #
 # See rigs/ian.toml for what each stage is and when to switch it on.
 
+# Josh's usual camera puts the audio 4 frames ahead of the picture: the clap is
+# heard before the clapper closes. Applied when podio writes a video; positive
+# delays the audio. On another camera, override it in audio.toml.
+audio_delay_frames = 4
+
 [[stage]]
 name = "highpass"
 f = 80

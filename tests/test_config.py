@@ -133,3 +133,32 @@ def test_settings_podio_no_longer_reads_are_errors(tmp_path, toml, unknown):
     (tmp_path / "audio.toml").write_text(toml)
     with pytest.raises(ValueError, match=unknown):
         load_take(tmp_path / "ian.mp4", rigs)
+
+
+# Audio that runs ahead of the picture is a property of the recording rig, so
+# the rig sets the correction and an episode can change it for one take.
+
+
+def test_a_take_has_no_audio_delay_unless_its_rig_sets_one(tmp_path):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG)
+    assert load_take(tmp_path / "ian.mp4", rigs).audio_delay_frames == 0
+
+
+def test_a_rig_sets_the_audio_delay_in_frames(tmp_path):
+    rigs = rigs_dir(tmp_path, josh="audio_delay_frames = 4\n" + IAN_RIG)
+    take = load_take(tmp_path / "josh.mp4", rigs)
+    assert take.audio_delay_frames == 4
+    assert [s["name"] for s in take.chain] == ["highpass", "afftdn"]
+
+
+def test_audio_toml_overrides_the_rig_s_audio_delay(tmp_path):
+    rigs = rigs_dir(tmp_path, josh="audio_delay_frames = 4\n" + IAN_RIG)
+    (tmp_path / "audio.toml").write_text("[takes.josh]\naudio_delay_frames = -2\n")
+    assert load_take(tmp_path / "josh.mp4", rigs).audio_delay_frames == -2
+
+
+@pytest.mark.parametrize("value", ["4.5", '"4"', "true"])
+def test_an_audio_delay_that_is_not_whole_frames_is_an_error(tmp_path, value):
+    rigs = rigs_dir(tmp_path, josh=f"audio_delay_frames = {value}\n" + IAN_RIG)
+    with pytest.raises(ValueError, match="audio_delay_frames"):
+        load_take(tmp_path / "josh.mp4", rigs)

@@ -74,7 +74,8 @@ podio does these steps on each file:
 2. It sets the audio to the delivery loudness: −16 LUFS, peaks below −1 dBTP.
 3. It transcribes the audio and finds the words of the word list.
 4. It puts a tone on each word that it found.
-5. It writes the audio back into a file of the same type.
+5. It writes the audio back into a file of the same type. In a video, it moves
+   the audio by the `audio_delay_frames` of the rig.
 
 podio writes one file for each input:
 
@@ -125,12 +126,13 @@ enabled = true
 wordlist = "ian_words.toml"    # for ian.mp4 only
 ```
 
-| Key                          | Default              | Function                            |
-| ---------------------------- | -------------------- | ----------------------------------- |
-| `censor.wordlist`            | the included list    | A different word list.              |
-| `takes.NAME.rig`             | the name of the file | The rig file to use.                |
-| `takes.NAME.censor.wordlist` | the episode value    | A different word list for one take. |
-| `takes.NAME.STAGE`           | the rig              | A change to one stage for one take. |
+| Key                             | Default              | Function                                 |
+| ------------------------------- | -------------------- | ---------------------------------------- |
+| `censor.wordlist`               | the included list    | A different word list.                   |
+| `takes.NAME.rig`                | the name of the file | The rig file to use.                     |
+| `takes.NAME.audio_delay_frames` | the rig              | A different audio delay for one take.    |
+| `takes.NAME.censor.wordlist`    | the episode value    | A different word list for one take.      |
+| `takes.NAME.STAGE`              | the rig              | A change to one stage for one take.      |
 
 `NAME` is the name of the file without the extension. Only the stages in the
 rig are available. podio gives an error message for an unknown stage or an
@@ -153,6 +155,19 @@ usual tone. The tool includes the rigs `ian` and `josh`.
 
 The directory must have one file for each take, or for each rig that
 `audio.toml` names.
+
+A rig can also set `audio_delay_frames` before its stages. Use it when the
+audio and the picture of the camera are not synchronized:
+
+```toml
+audio_delay_frames = 4   # the audio is 4 frames before the picture
+```
+
+A positive value moves the audio later. A negative value moves the audio
+earlier. podio gets the frame rate from the video. podio does not move the
+audio of a `.wav` output, because it has no picture. The rigs `josh` and
+`josh_dji` set 4. If you use a different camera for one episode, set
+`[takes.josh] audio_delay_frames = 0` in `audio.toml`.
 
 A rig lists all the stages, and it sets `enabled = false` for the stages that
 are not usually necessary. Keep this rule: a rig holds what does not change,
@@ -367,6 +382,8 @@ the transcription, enter `podio debug clean ian.mp4`. It writes
 | The voice is dull                              | Use the `eq` stage. Refer to section 6.                                                     |
 | Sharp "s" sounds                               | `[takes.X.deesser] intensity = 0.6`                                                         |
 | The level goes from loud to quiet              | `[takes.X.compressor] ratio = 4`                                                            |
+| You hear the clap before the clapper closes    | `[takes.X] audio_delay_frames = N`, where N is the number of frames between them.           |
+| You hear the clap after the clapper closes     | `[takes.X] audio_delay_frames = -N`                                                         |
 
 If a take is very different from usual, for example a different room or a
 different microphone, change `audio.toml`. Do not change the rig.
