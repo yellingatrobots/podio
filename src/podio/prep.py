@@ -22,6 +22,8 @@ from typing import Iterator
 from . import censor, ffmpeg
 from .clean import process, report, write_sidecar
 from .config import Take, load_take
+from .deliver import measure
+from .levels import TARGET_LUFS, TRUE_PEAK_LIMIT_DB, meets_delivery
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
 
@@ -99,7 +101,9 @@ def prep_one(job: Job) -> Path:
     """Prep one file and return what was written."""
     name = job.take.name
     with _workdir(job.keep) as work:
-        result = process(job.take, job.rnnoise_models, None, work, False, work)
+        result = process(
+            job.take, job.rnnoise_models, work, work / f"{name}_cleaned.wav"
+        )
         audio = result.output
         if job.wordlist:
             transcriber = WhisperXTranscriber(model_size=job.model, device="cpu", language="en")
@@ -115,6 +119,15 @@ def prep_one(job: Job) -> Path:
             shutil.copyfile(audio, job.output)
         else:
             ffmpeg.run(ffmpeg.encode_video_command(job.media, audio, job.output))
+    # Encoding moves the true peak; the limiter's half-dB margin should absorb
+    # it, and this says so when it has not.
+    delivered = measure(job.output)
+    if not meets_delivery(delivered.integrated_lufs, delivered.true_peak_db):
+        report(
+            f"{name:6} WARN  {job.output.name} is I {delivered.integrated_lufs:.1f} "
+            f"LUFS  TP {delivered.true_peak_db:.1f} dB, outside "
+            f"{TARGET_LUFS:g} LUFS / {TRUE_PEAK_LIMIT_DB:g} dBTP"
+        )
     report(f"{name:6} wrote {job.output}")
     return job.output
 

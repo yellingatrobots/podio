@@ -146,7 +146,7 @@ def test_keep_temp_keeps_the_intermediates(episode, tmp_path):
     assert prep(episode, "--keep-temp", str(kept), str(episode / "ian.wav")) == 0
 
     names = {p.name for p in (kept / "ian").iterdir()}
-    assert {"ian_prepped.wav", "ian_censored.wav", "ian_manifest.json",
+    assert {"ian_cleaned.wav", "ian_censored.wav", "ian_manifest.json",
             "ian_transcript.json", "audio_analysis.toml"} <= names
 
 

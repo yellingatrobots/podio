@@ -1,8 +1,7 @@
-"""One test that actually runs ffmpeg, proving the three passes chain up."""
+"""The debug steps, run against the real ffmpeg."""
 
 import shutil
 import subprocess
-import tomllib
 from pathlib import Path
 
 import pytest
@@ -24,13 +23,6 @@ name = "compressor"
 threshold_db = -18
 ratio = 3
 """
-
-EPISODE = """
-[takes.alex]
-file = "alex.wav"
-rig = "booth"
-"""
-
 
 def make_take(path: Path):
     """A quiet steady tone with a little pink noise under it."""
@@ -58,97 +50,39 @@ def loudness_of(path: Path) -> tuple[float, float]:
 @pytest.fixture
 def episode(tmp_path):
     (tmp_path / "rigs").mkdir()
-    (tmp_path / "rigs" / "booth.toml").write_text(RIG)
-    (tmp_path / "audio.toml").write_text(EPISODE)
+    (tmp_path / "rigs" / "alex.toml").write_text(RIG)
     make_take(tmp_path / "alex.wav")
     return tmp_path
 
 
-def run_on(episode: Path, *extra: str) -> int:
-    return main(
-        ["clean", "-c", str(episode / "audio.toml"), "--rigs", str(episode / "rigs"), *extra]
-    )
+def clean(episode: Path, *extra: str) -> int:
+    return main(["debug", "clean", str(episode / "alex.wav"),
+                 "--rigs", str(episode / "rigs"), *extra])
 
 
-def test_a_prepped_take_lands_at_delivery_loudness(episode):
-    assert run_on(episode) == 0
+def test_a_cleaned_take_lands_at_delivery_loudness(episode):
+    assert clean(episode) == 0
 
-    integrated, peak = loudness_of(episode / "alex_prepped.wav")
+    integrated, peak = loudness_of(episode / "alex_cleaned.wav")
     assert integrated == pytest.approx(-16.0, abs=0.5)
     assert peak <= -1.0
 
 
-def test_the_prepped_take_is_24_bit_48k_mono(episode):
-    run_on(episode)
+def test_the_cleaned_take_is_24_bit_48k_mono(episode):
+    clean(episode)
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
          "stream=codec_name,sample_rate,channels", "-of", "csv=p=0",
-         str(episode / "alex_prepped.wav")],
+         str(episode / "alex_cleaned.wav")],
         capture_output=True, text=True, check=True,
     )
     assert probe.stdout.strip() == "pcm_s24le,48000,1"
 
 
-def test_the_run_records_what_it_measured(episode):
-    run_on(episode)
-    sidecar = tomllib.loads((episode / "audio_analysis.toml").read_text())
-
-    assert sidecar["target_lufs"] == -16.0
-    assert sidecar["working_rate_hz"] == 48000
-    assert sidecar["alex"]["output"] == "alex_prepped.wav"
-    assert sidecar["alex"]["chain"].startswith("highpass=f=80")
-    assert sidecar["alex"]["delivered_lufs"] == pytest.approx(-16.0, abs=0.5)
-
-
-def test_an_audition_writes_a_separate_short_file(episode):
-    assert run_on(episode, "--range", "5+3") == 0
-
-    audition = episode / "alex_audition.wav"
-    assert audition.exists()
-    assert not (episode / "alex_prepped.wav").exists()
-
-
-def test_a_dry_run_measures_but_writes_nothing(episode):
-    assert run_on(episode, "--dry-run") == 0
-    assert not (episode / "alex_prepped.wav").exists()
-    assert not (episode / "audio_analysis.toml").exists()
-
-
-def full_pass(episode: Path, *extra: str) -> int:
-    return main(
-        ["run", "-c", str(episode / "audio.toml"), "--rigs", str(episode / "rigs"), *extra]
-    )
-
-
-def test_a_run_with_censoring_off_stops_after_the_prepped_take(episode):
-    (episode / "audio.toml").write_text(EPISODE + "\n[censor]\nenabled = false\n")
-
-    assert full_pass(episode) == 0
-    assert (episode / "alex_prepped.wav").exists()
-    assert not (episode / "alex_censored.wav").exists()
-    assert not (episode / "alex_manifest.json").exists()
-
-
-def test_an_audition_is_never_censored(episode):
-    """A slice's manifest would be timed against the slice, not the take."""
-    assert full_pass(episode, "--range", "0+2") == 0
-    assert (episode / "alex_audition.wav").exists()
-    assert not (episode / "alex_manifest.json").exists()
-
-
-def test_a_run_refuses_to_discard_a_hand_edited_manifest(episode):
-    edited = '{"spans": [{"start": 1.0, "end": 1.2}]}'
-    (episode / "alex_manifest.json").write_text(edited)
-
-    assert full_pass(episode) == 1
-    assert (episode / "alex_manifest.json").read_text() == edited
-    assert not (episode / "alex_censored.wav").exists()
-
-
-def test_a_dry_run_censors_nothing(episode):
-    assert full_pass(episode, "--dry-run") == 0
-    assert not (episode / "alex_prepped.wav").exists()
-    assert not (episode / "alex_manifest.json").exists()
+def test_a_dry_run_measures_but_writes_nothing(episode, capsys):
+    assert clean(episode, "--dry-run") == 0
+    assert sorted(p.name for p in episode.iterdir()) == ["alex.wav", "rigs"]
+    assert "chain highpass=f=80" in capsys.readouterr().err
 
 
 def make_video(path: Path):
@@ -178,7 +112,7 @@ def test_mux_puts_the_censored_audio_over_the_source_video(tmp_path):
     make_take(tmp_path / "alex_censored.wav")
 
     out = tmp_path / "episode_censored.mov"
-    assert main(["mux", str(tmp_path / "episode.mp4"),
+    assert main(["debug", "mux", str(tmp_path / "episode.mp4"),
                  str(tmp_path / "alex_censored.wav"), "--out", str(out)]) == 0
     # The picture is copied through and the wav lands intact, not re-encoded.
     assert streams_of(out) == ["mpeg4,video", "pcm_s16le,audio"]
@@ -188,88 +122,6 @@ def test_mux_names_its_output_after_the_source_when_not_told(tmp_path):
     make_video(tmp_path / "episode.mp4")
     make_take(tmp_path / "alex_censored.wav")
 
-    assert main(["mux", str(tmp_path / "episode.mp4"),
+    assert main(["debug", "mux", str(tmp_path / "episode.mp4"),
                  str(tmp_path / "alex_censored.wav")]) == 0
     assert (tmp_path / "episode_muxed.mov").exists()
-
-
-class EmptyTranscriber:
-    def __init__(self, **_kwargs):
-        pass
-
-    def transcribe(self, _audio_path):
-        return []
-
-
-def test_finish_requires_a_matching_video_before_processing(episode):
-    assert main([
-        "finish", "-c", str(episode / "audio.toml"),
-        "--rigs", str(episode / "rigs"),
-    ]) == 1
-    assert not (episode / "podio_artifacts").exists()
-
-
-def test_finish_keeps_only_the_muxed_take_in_the_episode_root(episode, monkeypatch):
-    make_video(episode / "alex.mp4")
-    monkeypatch.setattr("podio.cli.WhisperXTranscriber", EmptyTranscriber)
-
-    assert main([
-        "finish", "-c", str(episode / "audio.toml"),
-        "--rigs", str(episode / "rigs"),
-    ]) == 0
-
-    artifacts = episode / "podio_artifacts"
-    assert (episode / "alex_muxed.mov").exists()
-    assert (artifacts / "alex_prepped.wav").exists()
-    assert (artifacts / "alex_censored.wav").exists()
-    assert (artifacts / "alex_manifest.json").exists()
-    assert (artifacts / "alex_transcript.json").exists()
-    assert (artifacts / "audio_analysis.toml").exists()
-    assert not (episode / "alex_prepped.wav").exists()
-    assert not (episode / "alex_censored.wav").exists()
-
-
-SPEECH = Path(__file__).resolve().parents[1] / "test_audio" / "clean.m4a"
-
-
-def make_mixdown(path: Path):
-    """What the NLE exports: picture over raw speech, quiet and peaky enough
-    (about -37 LUFS, 22 dB peak-to-loudness) that the limiter has to work."""
-    subprocess.run(
-        [
-            "ffmpeg", "-hide_banner", "-loglevel", "error", "-y",
-            "-f", "lavfi", "-i", "testsrc=size=160x120:rate=10",
-            "-i", str(SPEECH),
-            "-map", "0:v", "-map", "1:a",
-            "-c:v", "mpeg4", "-c:a", "aac", "-b:a", "256k", "-shortest", str(path),
-        ],
-        check=True,
-    )
-
-
-def video_stream(path: Path) -> str:
-    return subprocess.run(
-        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-count_packets",
-         "-show_entries", "stream=codec_name,nb_read_packets", "-of", "csv=p=0",
-         str(path)],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
-
-
-def test_master_delivers_at_minus_16_under_minus_1_with_the_picture_untouched(tmp_path):
-    mixdown = tmp_path / "ep.mp4"
-    make_mixdown(mixdown)
-
-    assert main(["master", str(mixdown)]) == 0
-
-    for out in (tmp_path / "ep_mastered.mp4", tmp_path / "ep_mastered.mp3"):
-        integrated, peak = loudness_of(out)
-        assert integrated == pytest.approx(-16.0, abs=1.0)
-        assert peak <= -1.0
-    assert video_stream(tmp_path / "ep_mastered.mp4") == video_stream(mixdown)
-    rate = subprocess.run(
-        ["ffprobe", "-v", "error", "-show_entries", "stream=sample_rate",
-         "-of", "csv=p=0", str(tmp_path / "ep_mastered.mp3")],
-        capture_output=True, text=True, check=True,
-    ).stdout.strip()
-    assert rate == "44100"

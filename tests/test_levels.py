@@ -4,8 +4,8 @@ from podio.levels import (
     TARGET_LUFS,
     Measured,
     db_to_linear,
-    master_gain,
-    master_settled,
+    delivery_gain,
+    delivery_settled,
     meets_delivery,
     resolve_db,
     tone_amplitude,
@@ -58,12 +58,12 @@ def test_tone_amplitude_never_exceeds_full_scale():
     assert tone_amplitude(0.0, full_scale=2_147_483_647) == 2_147_483_647
 
 
-def test_master_gain_brings_the_mixdown_to_the_target():
-    assert master_gain(-24.0) == pytest.approx(8.0)
+def test_delivery_gain_brings_quiet_audio_to_the_target():
+    assert delivery_gain(-24.0) == pytest.approx(8.0)
 
 
-def test_master_gain_turns_a_hot_mixdown_down():
-    assert master_gain(-12.5) == pytest.approx(-3.5)
+def test_delivery_gain_turns_hot_audio_down():
+    assert delivery_gain(-12.5) == pytest.approx(-3.5)
 
 
 def test_delivery_within_a_loudness_unit_and_under_the_peak_limit_passes():
@@ -78,9 +78,9 @@ def test_delivery_fails_more_than_a_loudness_unit_off_target():
     assert not meets_delivery(TARGET_LUFS - 1.3, -3.0)
 
 
-def test_a_master_within_a_fifth_of_a_unit_has_settled():
-    assert master_settled(TARGET_LUFS - 0.15)
+def test_a_render_within_a_fifth_of_a_unit_has_settled():
+    assert delivery_settled(TARGET_LUFS - 0.15)
 
 
-def test_a_master_the_limiter_pulled_two_units_down_has_not():
-    assert not master_settled(TARGET_LUFS - 2.0)
+def test_a_render_the_limiter_pulled_two_units_down_has_not():
+    assert not delivery_settled(TARGET_LUFS - 2.0)

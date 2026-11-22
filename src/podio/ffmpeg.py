@@ -21,7 +21,7 @@ FFMPEG_VARIABLE = "PODIO_FFMPEG"
 WINDOW_RMS = re.compile(r"lavfi\.astats\.Overall\.RMS_level=(-?[\d.]+|-inf)")
 
 WINDOW_SECONDS = 1
-#: The rate the chain runs at, and so the rate every prepped take is written at.
+#: The rate the chain runs at, and so the rate every cleaned take is written at.
 #: 48 kHz because that is what video work expects and the only rate `rnnoise`
 #: can run at. Every take is brought to it before the chain, once.
 WORKING_RATE = 48_000
@@ -36,19 +36,15 @@ FLOOR_PERCENTILE = 0.10
 SILENCE_LIMIT_DB = -100.0
 INTEGRATED = re.compile(r"^\s+I:\s*(-?[\d.]+) LUFS", re.MULTILINE)
 TRUE_PEAK = re.compile(r"^\s+Peak:\s*(-?[\d.]+) dBFS", re.MULTILINE)
-RANGE = re.compile(r"^(\d+(?::\d+){0,2}(?:\.\d+)?)\+(\d+(?:\.\d+)?)$")
 #: Containers that hold PCM, so a finished WAV can be muxed in untouched. MP4
 #: is not one of them in any player worth relying on.
 PCM_CONTAINERS = {".mov", ".mkv"}
 #: alimiter limits sample peaks. Run four times over the working rate, the
 #: samples land close enough to the inter-sample peaks to limit true peak.
 OVERSAMPLED_RATE = 4 * WORKING_RATE
-#: Delivery encodes. 44.1 kHz 128 kbps is what Apple asks of a feed MP3.
+#: The audio of a prepped video. Transparent for speech, and a second AAC
+#: generation when the NLE exports stays inaudible.
 VIDEO_AUDIO_BITRATE = "192k"
-FEED_BITRATE = "128k"
-FEED_RATE = 44_100
-
-Audition = tuple[float, float] | None
 
 
 def executable() -> str:
@@ -67,21 +63,6 @@ def executable() -> str:
     """
     chosen = os.environ.get(FFMPEG_VARIABLE)
     return (chosen and shutil.which(chosen)) or "ffmpeg"
-
-
-def parse_range(text: str) -> tuple[float, float]:
-    """Read an audition range: START+SECONDS, e.g. 21:30+45."""
-    match = RANGE.match(text.strip())
-    if not match:
-        raise ValueError(
-            f"cannot read {text!r} as a range; expected START+SECONDS "
-            f"such as 21:30+45, 300+30 or 1:02:03+10"
-        )
-    start, duration = match.groups()
-    seconds = 0.0
-    for part in start.split(":"):
-        seconds = seconds * 60 + float(part)
-    return seconds, float(duration)
 
 
 def parse_noise_floor(output: str) -> float:
@@ -113,15 +94,11 @@ def parse_loudness(output: str) -> tuple[float, float]:
     return float(integrated[-1]), float(peak[-1])
 
 
-def _base(source: Path, audition: Audition) -> list[str]:
-    cmd = [executable(), "-hide_banner", "-nostats", "-y"]
-    if audition:
-        start, duration = audition
-        cmd += ["-ss", f"{start:g}", "-t", f"{duration:g}"]
-    return cmd + ["-i", str(source)]
+def _base(source: Path) -> list[str]:
+    return [executable(), "-hide_banner", "-nostats", "-y", "-i", str(source)]
 
 
-def analyse_command(source: Path, audition: Audition) -> list[str]:
+def analyse_command(source: Path) -> list[str]:
     """Pass 1: report a level per one-second window, write no audio.
 
     The take is brought to the working rate first, so a window is exactly a
@@ -136,19 +113,17 @@ def analyse_command(source: Path, audition: Audition) -> list[str]:
         "astats=metadata=1:reset=1",
         "ametadata=print:key=lavfi.astats.Overall.RMS_level:file=-",
     )
-    return _base(source, audition) + ["-af", chain, "-f", "null", "-"]
+    return _base(source) + ["-af", chain, "-f", "null", "-"]
 
 
-def render_command(
-    source: Path, chain: str, destination: Path, audition: Audition
-) -> list[str]:
+def render_command(source: Path, chain: str, destination: Path) -> list[str]:
     """Pass 2: run the chain into a float working file, metering as it goes.
 
     The rate is pinned here rather than inside the chain: every stage is
     configured against the working rate and `rnnoise` runs at no other, so it is
     an invariant of the pass and not something a chain can opt out of.
     """
-    return _base(source, audition) + [
+    return _base(source) + [
         "-af",
         _filters(f"aresample={WORKING_RATE}", chain, "ebur128=peak=true"),
         "-c:a",
@@ -180,7 +155,7 @@ def normalize(source, destination, *, rate: int = ASR_RATE) -> Path:
 def decode_command(source: Path, destination: Path) -> list[str]:
     """Decode `source` to mono 32-bit WAV at its own sample rate.
 
-    32-bit because a prepped take is 24-bit and Python's ``array`` has no
+    32-bit because a cleaned take is 24-bit and Python's ``array`` has no
     three-byte type; s32 is the smallest that holds a 24-bit sample without
     loss, and ffmpeg converts back down on the way out.
     """
@@ -292,13 +267,13 @@ def mux(source, audio, destination) -> Path:
 
 
 def measure_command(source: Path) -> list[str]:
-    """Meter a mixdown's loudness and true peak, writing nothing."""
-    return _base(source, None) + [
+    """Meter a file's loudness and true peak, writing nothing."""
+    return _base(source) + [
         "-map", "0:a:0", "-af", "ebur128=peak=true", "-f", "null", "-",
     ]
 
 
-def master_command(source: Path, gain_db: float, destination: Path) -> list[str]:
+def level_command(source: Path, gain_db: float, destination: Path) -> list[str]:
     """Gain to the delivery loudness, limit the peaks that pushes over, and
     meter the result.
 
@@ -316,13 +291,13 @@ def master_command(source: Path, gain_db: float, destination: Path) -> list[str]
         f"aresample={WORKING_RATE}",
         "ebur128=peak=true",
     )
-    return _base(source, None) + [
+    return _base(source) + [
         "-map", "0:a:0", "-af", chain, "-c:a", "pcm_s24le", str(destination),
     ]
 
 
 def encode_video_command(video: Path, audio: Path, destination: Path) -> list[str]:
-    """Put the master over `video`'s picture, untouched, as a web-ready MP4."""
+    """Put finished audio over `video`'s picture, untouched, encoded to AAC."""
     return [
         executable(), "-hide_banner", "-y",
         "-i", str(video),
@@ -331,16 +306,6 @@ def encode_video_command(video: Path, audio: Path, destination: Path) -> list[st
         "-c:v", "copy", "-c:a", "aac", "-b:a", VIDEO_AUDIO_BITRATE,
         "-movflags", "+faststart",
         "-shortest",
-        str(destination),
-    ]
-
-
-def encode_mp3_command(audio: Path, destination: Path) -> list[str]:
-    """Encode the master as the podcast feed's MP3."""
-    return [
-        executable(), "-hide_banner", "-y",
-        "-i", str(audio),
-        "-c:a", "libmp3lame", "-b:a", FEED_BITRATE, "-ar", str(FEED_RATE),
         str(destination),
     ]
 

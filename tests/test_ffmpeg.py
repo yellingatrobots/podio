@@ -5,14 +5,12 @@ import pytest
 from podio.ffmpeg import (
     FFMPEG_VARIABLE,
     analyse_command,
-    encode_mp3_command,
     encode_video_command,
-    master_command,
+    level_command,
     measure_command,
     executable,
     parse_loudness,
     parse_noise_floor,
-    parse_range,
     render_command,
 )
 
@@ -43,7 +41,7 @@ def test_commands_run_the_resolved_executable(tmp_path, monkeypatch):
     baked.write_text("#!/bin/sh\n")
     baked.chmod(0o755)
     monkeypatch.setenv(FFMPEG_VARIABLE, str(baked))
-    assert analyse_command(Path("ian.wav"), audition=None)[0] == str(baked)
+    assert analyse_command(Path("ian.wav"))[0] == str(baked)
 
 def windows(*levels: str) -> str:
     return "".join(
@@ -105,27 +103,10 @@ def test_parse_loudness_complains_when_absent():
         parse_loudness("nothing useful here")
 
 
-def test_parse_range_minutes_and_seconds():
-    assert parse_range("21:30+45") == (1290.0, 45.0)
-
-
-def test_parse_range_bare_seconds():
-    assert parse_range("300+30") == (300.0, 30.0)
-
-
-def test_parse_range_hours():
-    assert parse_range("1:02:03+10") == (3723.0, 10.0)
-
-
-def test_parse_range_rejects_nonsense():
-    with pytest.raises(ValueError, match="START"):
-        parse_range("halfway")
-
-
 def test_analyse_command_measures_in_one_second_windows_at_the_working_rate():
     """Resampling first is what makes a window exactly a second wide whatever
     rate the take arrived at — a short window shifts the noise-floor percentile."""
-    cmd = analyse_command(Path("ian.wav"), audition=None)
+    cmd = analyse_command(Path("ian.wav"))
     assert cmd[-3:] == ["-f", "null", "-"]
     assert cmd[cmd.index("-af") + 1] == (
         "aresample=48000,asetnsamples=n=48000,astats=metadata=1:reset=1,"
@@ -133,14 +114,8 @@ def test_analyse_command_measures_in_one_second_windows_at_the_working_rate():
     )
 
 
-def test_analyse_command_bounds_itself_to_an_audition_range():
-    cmd = analyse_command(Path("ian.wav"), audition=(1290.0, 45.0))
-    assert cmd[cmd.index("-ss") + 1] == "1290"
-    assert cmd[cmd.index("-t") + 1] == "45"
-
-
 def test_render_command_pins_the_working_rate_ahead_of_the_chain():
-    cmd = render_command(Path("ian.wav"), "highpass=f=80", Path("tmp.wav"), None)
+    cmd = render_command(Path("ian.wav"), "highpass=f=80", Path("tmp.wav"))
     chain = cmd[cmd.index("-af") + 1]
     assert chain == "aresample=48000,highpass=f=80,ebur128=peak=true"
     assert cmd[cmd.index("-c:a") + 1] == "pcm_f32le"
@@ -148,19 +123,19 @@ def test_render_command_pins_the_working_rate_ahead_of_the_chain():
 
 
 def test_render_command_survives_a_chain_with_no_stages_enabled():
-    cmd = render_command(Path("ian.wav"), "", Path("tmp.wav"), None)
+    cmd = render_command(Path("ian.wav"), "", Path("tmp.wav"))
     assert cmd[cmd.index("-af") + 1] == "aresample=48000,ebur128=peak=true"
 
 
-def test_measuring_a_mixdown_meters_only_its_first_audio_stream():
+def test_measuring_meters_only_the_first_audio_stream():
     cmd = measure_command(Path("ep.mp4"))
     assert cmd[cmd.index("-map") + 1] == "0:a:0"
     assert cmd[cmd.index("-af") + 1] == "ebur128=peak=true"
     assert cmd[-3:] == ["-f", "null", "-"]
 
 
-def test_the_master_limits_oversampled_and_leaves_the_level_alone():
-    cmd = master_command(Path("ep.mp4"), 8.0, Path("master.wav"))
+def test_leveling_limits_oversampled_and_leaves_the_level_alone():
+    cmd = level_command(Path("ep.mp4"), 8.0, Path("master.wav"))
     chain = cmd[cmd.index("-af") + 1].split(",")
 
     assert chain[0] == "volume=8dB"
@@ -176,16 +151,9 @@ def test_the_master_limits_oversampled_and_leaves_the_level_alone():
     assert cmd[-1] == "master.wav"
 
 
-def test_the_mastered_video_copies_the_picture_and_encodes_aac():
+def test_the_prepped_video_copies_the_picture_and_encodes_aac():
     cmd = encode_video_command(Path("ep.mp4"), Path("master.wav"), Path("out.mp4"))
     assert cmd[cmd.index("-c:v") + 1] == "copy"
     assert cmd[cmd.index("-c:a") + 1] == "aac"
     assert "+faststart" in cmd
     assert cmd[-1] == "out.mp4"
-
-
-def test_the_feed_mp3_is_44_1k():
-    cmd = encode_mp3_command(Path("master.wav"), Path("out.mp3"))
-    assert cmd[cmd.index("-c:a") + 1] == "libmp3lame"
-    assert cmd[cmd.index("-ar") + 1] == "44100"
-    assert cmd[-1] == "out.mp3"

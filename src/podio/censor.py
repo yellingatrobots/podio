@@ -1,7 +1,7 @@
-"""Censor a prepped take: detect the spans, then splice the tone over them.
+"""Censor a cleaned take: detect the spans, then splice the tone over them.
 
-Detection listens to the prepped take rather than the raw one — denoising and
-gating measurably help the ASR — and the tone goes on last, after gain match,
+Detection listens to the cleaned take rather than the raw one — denoising and
+gating measurably help the ASR — and the tone goes on last, after leveling,
 so it never passes through the compressor or the gate.
 """
 
@@ -27,22 +27,6 @@ def censored_path(episode_dir: Path, take_name: str) -> Path:
     return Path(episode_dir) / f"{take_name}_censored.wav"
 
 
-def is_hand_edited(manifest: Path, transcript: Path) -> bool:
-    """Has this manifest been touched since detection wrote it?
-
-    Detection writes the manifest and its transcript together and nothing but a
-    human edits either afterwards, so a manifest newer than its transcript
-    carries judgement that a re-run would destroy. A manifest with no transcript
-    beside it has nothing to prove where it came from, so it is treated the same
-    way — the cautious answer is the one that cannot lose work.
-    """
-    if not manifest.exists():
-        return False
-    if not transcript.exists():
-        return True
-    return manifest.stat().st_mtime > transcript.stat().st_mtime
-
-
 def detect_into(
     prepped: Path,
     episode_dir: Path,
@@ -54,7 +38,7 @@ def detect_into(
     min_confidence: float,
 ) -> tuple[Path, int]:
     """Transcribe `prepped`, write the manifest and transcript, return (path, spans)."""
-    # Handed the prepped take as it is: a transcriber owns the decode its model
+    # Handed the cleaned take as it is: a transcriber owns the decode its model
     # needs, and WhisperX already shells out to ffmpeg for mono 16 kHz. Doing it
     # here as well only wrote a temp copy for WhisperX to convert a second time.
     transcript, manifest = transcribe_and_detect(
@@ -63,8 +47,6 @@ def detect_into(
     )
 
     written = manifest_path(episode_dir, take_name)
-    # Transcript last: is_hand_edited reads their order, and detection must
-    # never leave behind a pair that looks hand-edited.
     _ = written.write_text(manifest.to_json())
     _ = transcript_path(episode_dir, take_name).write_text(transcript.to_json())
     return written, len(manifest.spans)

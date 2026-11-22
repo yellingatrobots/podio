@@ -19,13 +19,13 @@ TRUE_PEAK_LIMIT_DB = -1.0
 TONE_LEVEL_DB = TARGET_LUFS - 3.0
 #: AES TD1008's tolerance around the target.
 TARGET_TOLERANCE_LU = 1.0
-#: Where the master's limiter sits: half a dB under the true-peak limit, for
+#: Where the delivery limiter sits: half a dB under the true-peak limit, for
 #: the overshoot AAC and MP3 encoding add on top of it.
 LIMITER_CEILING_DB = -1.5
-#: How close a rendered master must come to the target before it is encoded.
+#: How close a leveled render must come to the target before it is used.
 #: The limiter pulls integrated loudness down as it works — two units on raw
-#: speech — so the gain is corrected and the master rendered again until here.
-MASTER_SETTLED_LU = 0.2
+#: speech — so the gain is corrected and the audio rendered again until here.
+SETTLED_LU = 0.2
 
 
 @dataclass(frozen=True)
@@ -89,16 +89,16 @@ def tone_amplitude(tone_level_db: float, full_scale: int) -> int:
     return min(full_scale, round(peak))
 
 
-def master_gain(integrated_lufs: float) -> float:
-    """Constant gain bringing a mixdown to the delivery loudness."""
+def delivery_gain(integrated_lufs: float) -> float:
+    """Constant gain bringing audio to the delivery loudness."""
     return TARGET_LUFS - integrated_lufs
 
 
-def master_settled(integrated_lufs: float) -> bool:
-    return abs(integrated_lufs - TARGET_LUFS) <= MASTER_SETTLED_LU
+def delivery_settled(integrated_lufs: float) -> bool:
+    return abs(integrated_lufs - TARGET_LUFS) <= SETTLED_LU
 
 
 def meets_delivery(integrated_lufs: float, true_peak_db: float) -> bool:
-    """Whether an encoded master lands on target and under the peak limit."""
+    """Whether an encoded file lands on target and under the peak limit."""
     on_target = abs(integrated_lufs - TARGET_LUFS) <= TARGET_TOLERANCE_LU
     return on_target and true_peak_db <= TRUE_PEAK_LIMIT_DB
