@@ -1,7 +1,7 @@
 """Clean the raw per-speaker takes of an episode into prepped takes.
 
-Measures each take, resolves its chain, renders it, and brings it to the
-working level by a single gain. Censoring is a separate stage.
+Measures each take, resolves its chain, renders it, and brings it to
+delivery loudness (-16 LUFS, under -1 dBTP). Censoring is a separate stage.
 """
 
 import shutil
@@ -13,7 +13,8 @@ from pathlib import Path
 
 from . import config as config_module
 from . import ffmpeg
-from .levels import GainMatch, Measured, gain_match
+from .levels import TARGET_LUFS, TRUE_PEAK_LIMIT_DB, Measured
+from .master import Leveled, Loudness, level
 from .stages import build_chain
 
 
@@ -22,13 +23,13 @@ class Result:
     take: config_module.Take
     chain: str
     measured: Measured
-    gain: GainMatch
+    #: None on a dry run, which renders nothing.
+    leveled: Leveled | None
     output: Path
 
 
 def process(
     take: config_module.Take,
-    episode: config_module.Episode,
     models_dir: Path,
     audition: ffmpeg.Audition,
     workdir: Path,
@@ -46,41 +47,30 @@ def process(
 
     if dry_run:
         report(f"{take.name:6} chain {chain}")
-        return Result(take, chain, measured, GainMatch(0.0, floor, False), output)
+        return Result(take, chain, measured, None, output)
 
     working = workdir / f"{take.name}.wav"
     integrated, peak = ffmpeg.parse_loudness(
         ffmpeg.run(ffmpeg.render_command(take.source, chain, working, audition))
     )
     measured = replace(measured, integrated_lufs=integrated, true_peak_db=peak)
-    gain = gain_match(measured, episode.working_level_db, episode.peak_ceiling_db)
+    leveled = level(working, Loudness(integrated, peak), output)
+    out = leveled.rendered
     report(
         f"{take.name:6} chain I {integrated:6.1f} LUFS  TP {peak:5.1f} dB"
-        f"  gain {gain.gain_db:+.1f} dB  ->  TP {gain.resulting_peak_db:5.1f} dB"
-    )
-    if gain.clamped:
-        report(
-            f"{take.name:6} WARN  gain clamped at the peak ceiling; this take lands "
-            f"{episode.working_level_db - (integrated + gain.gain_db):.1f} LU under the "
-            f"working level. Set limiter = true for this take, or lower "
-            f"working_level_db."
-        )
-
-    ffmpeg.run(
-        ffmpeg.apply_gain_command(
-            working, output, gain.gain_db, take.limiter, episode.peak_ceiling_db
-        )
+        f"  gain {leveled.gain_db:+.1f} dB"
+        f"  ->  I {out.integrated_lufs:6.1f} LUFS  TP {out.true_peak_db:5.1f} dB"
     )
     report(f"{take.name:6} wrote {output.name}")
-    return Result(take, chain, measured, gain, output)
+    return Result(take, chain, measured, leveled, output)
 
 
-def write_sidecar(path: Path, episode: config_module.Episode, results: list[Result]):
+def write_sidecar(path: Path, results: list[Result]):
     lines = [
         f"# written by podio at {datetime.now(timezone.utc).isoformat()}",
         "# a record of one run; never read back as input",
-        f"working_level_db = {episode.working_level_db}",
-        f"peak_ceiling_db = {episode.peak_ceiling_db}",
+        f"target_lufs = {TARGET_LUFS}",
+        f"true_peak_limit_db = {TRUE_PEAK_LIMIT_DB}",
         f"working_rate_hz = {ffmpeg.WORKING_RATE}",
     ]
     for r in results:
@@ -92,14 +82,13 @@ def write_sidecar(path: Path, episode: config_module.Episode, results: list[Resu
             f'chain = "{r.chain}"',
             f"noise_floor_db = {r.measured.floor_db:.2f}",
         ]
-        if r.measured.integrated_lufs is not None:
+        if r.leveled is not None:
             lines += [
                 f"integrated_lufs = {r.measured.integrated_lufs}",
                 f"true_peak_db = {r.measured.true_peak_db}",
-                f"gain_db = {r.gain.gain_db:.2f}",
-                f"resulting_peak_db = {r.gain.resulting_peak_db:.2f}",
-                f"clamped = {str(r.gain.clamped).lower()}",
-                f"limiter = {str(r.take.limiter).lower()}",
+                f"gain_db = {r.leveled.gain_db:.2f}",
+                f"delivered_lufs = {r.leveled.rendered.integrated_lufs}",
+                f"delivered_true_peak_db = {r.leveled.rendered.true_peak_db}",
             ]
     path.write_text("\n".join(lines) + "\n")
 
@@ -149,14 +138,14 @@ def clean_all(
     with tempfile.TemporaryDirectory(prefix="podio_") as tmp:
         results = [
             process(
-                t, episode, args.models, audition, Path(tmp), args.dry_run, output_dir
+                t, args.models, audition, Path(tmp), args.dry_run, output_dir
             )
             for t in takes
         ]
 
     if not args.dry_run:
         sidecar = output_dir / "audio_analysis.toml"
-        write_sidecar(sidecar, episode, results)
+        write_sidecar(sidecar, results)
         report(f"       wrote {sidecar.name}")
     return episode, results
 

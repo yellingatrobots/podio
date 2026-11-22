@@ -1,10 +1,9 @@
-"""Master the NLE's mixdown to delivery loudness, after the pass is done.
+"""Bring audio to delivery loudness: -16 LUFS integrated, under -1 dBTP.
 
 One constant gain to the target and a true-peak limiter to catch what that
 pushes over. Limiting costs loudness, so the gain is corrected by what each
-render fell short and the master rendered again until it settles. Then the
-same master is encoded twice: over the picture for video, and as the feed's
-MP3. Both encodes are metered again, since encoding moves the true peak.
+render fell short and the audio rendered again until it settles. Encoding
+moves the true peak, so whatever is encoded afterwards is metered again.
 """
 
 from __future__ import annotations
@@ -27,6 +26,12 @@ class Loudness:
 
 
 @dataclass(frozen=True)
+class Leveled:
+    gain_db: float
+    rendered: Loudness
+
+
+@dataclass(frozen=True)
 class Mastered:
     source: Loudness
     gain_db: float
@@ -41,25 +46,37 @@ def measure(path: Path) -> Loudness:
     return Loudness(*ffmpeg.parse_loudness(ffmpeg.run(ffmpeg.measure_command(path))))
 
 
+def level(source: Path, measured: Loudness, destination: Path) -> Leveled:
+    """Write `source` to `destination` (24-bit wav) at delivery loudness.
+
+    `measured` is what `source` meters at, passed in because the caller has
+    usually just metered it on the way past.
+    """
+    gain = master_gain(measured.integrated_lufs)
+    for _ in range(MAX_PASSES):
+        rendered = Loudness(
+            *ffmpeg.parse_loudness(
+                ffmpeg.run(ffmpeg.master_command(source, gain, destination))
+            )
+        )
+        if master_settled(rendered.integrated_lufs):
+            break
+        gain += TARGET_LUFS - rendered.integrated_lufs
+    return Leveled(gain, rendered)
+
+
 def master(video: Path, stem: Path) -> Mastered:
     """Write STEM.mp4 and STEM.mp3 from `video`, and what each measured."""
     source = measure(video)
-    gain = master_gain(source.integrated_lufs)
     mp4 = stem.with_name(f"{stem.name}.mp4")
     mp3 = stem.with_name(f"{stem.name}.mp3")
 
     with tempfile.TemporaryDirectory() as tmp:
         wav = Path(tmp) / "master.wav"
-        for _ in range(MAX_PASSES):
-            rendered = Loudness(
-                *ffmpeg.parse_loudness(
-                    ffmpeg.run(ffmpeg.master_command(video, gain, wav))
-                )
-            )
-            if master_settled(rendered.integrated_lufs):
-                break
-            gain += TARGET_LUFS - rendered.integrated_lufs
+        leveled = level(video, source, wav)
         ffmpeg.run(ffmpeg.encode_video_command(video, wav, mp4))
         ffmpeg.run(ffmpeg.encode_mp3_command(wav, mp3))
 
-    return Mastered(source, gain, {out: measure(out) for out in (mp4, mp3)})
+    return Mastered(
+        source, leveled.gain_db, {out: measure(out) for out in (mp4, mp3)}
+    )

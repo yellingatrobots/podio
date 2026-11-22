@@ -5,7 +5,6 @@ import pytest
 from podio.ffmpeg import (
     FFMPEG_VARIABLE,
     analyse_command,
-    apply_gain_command,
     encode_mp3_command,
     encode_video_command,
     master_command,
@@ -151,22 +150,6 @@ def test_render_command_pins_the_working_rate_ahead_of_the_chain():
 def test_render_command_survives_a_chain_with_no_stages_enabled():
     cmd = render_command(Path("ian.wav"), "", Path("tmp.wav"), None)
     assert cmd[cmd.index("-af") + 1] == "aresample=48000,ebur128=peak=true"
-
-
-def test_apply_gain_writes_24_bit_and_leaves_the_limiter_out_by_default():
-    cmd = apply_gain_command(
-        Path("tmp.wav"), Path("out.wav"), gain_db=1.2, limiter=False, ceiling_db=-3.0
-    )
-    assert cmd[cmd.index("-af") + 1] == "volume=1.2dB"
-    assert cmd[cmd.index("-c:a") + 1] == "pcm_s24le"
-
-
-def test_apply_gain_pins_the_limiter_auto_level_off():
-    cmd = apply_gain_command(
-        Path("tmp.wav"), Path("out.wav"), gain_db=4.8, limiter=True, ceiling_db=-3.0
-    )
-    chain = cmd[cmd.index("-af") + 1]
-    assert chain == "volume=4.8dB,alimiter=limit=0.70795:level=false"
 
 
 def test_measuring_a_mixdown_meters_only_its_first_audio_stream():

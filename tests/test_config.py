@@ -1,11 +1,6 @@
 import pytest
 
-from podio.config import (
-    DEFAULT_PEAK_CEILING_DB,
-    DEFAULT_WORKING_LEVEL_DB,
-    load_episode,
-    merge_chain,
-)
+from podio.config import load_episode, merge_chain
 
 RIG_CHAIN = [
     {"name": "highpass", "f": 80},
@@ -70,9 +65,6 @@ def test_load_episode_resolves_takes_against_their_rigs(tmp_path):
     config, rigs = write_episode(
         tmp_path,
         """
-        working_level_db = -20.0
-        peak_ceiling_db = -3.0
-
         [takes.ian]
         file = "ian.wav"
         rig = "ian"
@@ -84,46 +76,12 @@ def test_load_episode_resolves_takes_against_their_rigs(tmp_path):
     )
     episode = load_episode(config, rigs)
 
-    assert episode.working_level_db == -20.0
-    assert episode.peak_ceiling_db == -3.0
     assert len(episode.takes) == 1
 
     take = episode.takes[0]
     assert take.name == "ian"
     assert take.source == tmp_path / "ian.wav"
-    assert take.limiter is False
     assert take.chain[1] == {"name": "afftdn", "enabled": True}
-
-
-def test_an_episode_that_says_nothing_gets_the_one_default(tmp_path):
-    """The same pair a scaffolded episode is written with — there is no second
-    set of defaults hiding behind an omitted key."""
-    config, rigs = write_episode(
-        tmp_path,
-        """
-        [takes.ian]
-        file = "ian.wav"
-        """,
-        {"ian": IAN_RIG},
-    )
-    episode = load_episode(config, rigs)
-
-    assert episode.working_level_db == DEFAULT_WORKING_LEVEL_DB == -24.0
-    assert episode.peak_ceiling_db == DEFAULT_PEAK_CEILING_DB == -2.0
-
-
-def test_a_take_can_ask_for_the_limiter(tmp_path):
-    config, rigs = write_episode(
-        tmp_path,
-        """
-        [takes.josh]
-        file = "josh.wav"
-        rig = "ian"
-        limiter = true
-        """,
-        {"ian": IAN_RIG},
-    )
-    assert load_episode(config, rigs).takes[0].limiter is True
 
 
 def test_a_missing_rig_names_the_file_it_looked_for(tmp_path):
@@ -141,7 +99,7 @@ def test_a_missing_rig_names_the_file_it_looked_for(tmp_path):
 
 
 def test_an_episode_with_no_takes_is_an_error(tmp_path):
-    config, rigs = write_episode(tmp_path, "working_level_db = -20.0", {"ian": IAN_RIG})
+    config, rigs = write_episode(tmp_path, "", {"ian": IAN_RIG})
     with pytest.raises(ValueError, match="no takes"):
         load_episode(config, rigs)
 

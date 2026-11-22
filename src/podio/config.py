@@ -10,17 +10,9 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-TAKE_KEYS = {"file", "rig", "limiter"}
+TAKE_KEYS = {"file", "rig"}
 #: What podio itself writes into an episode directory. Never a take.
 OUTPUT_SUFFIXES = ("_prepped", "_censored", "_audition")
-#: The working level and peak ceiling, wherever an episode does not say
-#: otherwise — both what a scaffolded episode starts at and what an episode
-#: omitting the key gets. Low enough to leave the NLE room, and far enough
-#: apart to absorb a 22 dB peak-to-loudness ratio before the gain match has to
-#: clamp. `levels.TONE_LEVEL_DB` is set against this default, not derived
-#: from it: move one and move the other.
-DEFAULT_WORKING_LEVEL_DB = -24.0
-DEFAULT_PEAK_CEILING_DB = -2.0
 #: Take sub-tables that configure something other than a stage of the chain,
 #: and so must not be matched against the rig's stage names.
 NON_STAGE_TABLES = {"censor"}
@@ -42,14 +34,11 @@ class Take:
     name: str
     source: Path
     chain: list[Spec]
-    limiter: bool
     censor: Censor
 
 
 @dataclass(frozen=True)
 class Episode:
-    working_level_db: float
-    peak_ceiling_db: float
     takes: list[Take]
 
 
@@ -71,9 +60,6 @@ def stub_toml(episode_dir: Path, rigs_dir: Path) -> str:
     rigs = {p.stem for p in Path(rigs_dir).glob("*.toml")}
     lines = [
         "# Written by podio. Adjust and re-run.",
-        "",
-        f"working_level_db = {DEFAULT_WORKING_LEVEL_DB}",
-        f"peak_ceiling_db  = {DEFAULT_PEAK_CEILING_DB}",
     ]
     for take in takes:
         lines += ["", f"[takes.{take.stem}]", f'file = "{take.name}"']
@@ -134,11 +120,7 @@ def load_episode(config_path: Path, rigs_dir: Path) -> Episode:
         _load_take(name, table, config_path.parent, rigs_dir, censor)
         for name, table in takes_table.items()
     ]
-    return Episode(
-        working_level_db=episode.get("working_level_db", DEFAULT_WORKING_LEVEL_DB),
-        peak_ceiling_db=episode.get("peak_ceiling_db", DEFAULT_PEAK_CEILING_DB),
-        takes=takes,
-    )
+    return Episode(takes=takes)
 
 
 def _load_censor(table: Spec, inherited: Censor, episode_dir: Path) -> Censor:
@@ -173,6 +155,5 @@ def _load_take(
         name=name,
         source=episode_dir / table["file"],
         chain=merge_chain(rig.get("stage", []), overrides),
-        limiter=bool(table.get("limiter", False)),
         censor=_load_censor(table.get("censor", {}), censor, episode_dir),
     )

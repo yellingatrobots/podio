@@ -454,7 +454,7 @@ def build_parser() -> argparse.ArgumentParser:
 
         For every take in audio.toml, or only the TAKES named:
 
-          1  clean    measure ──▶ chain ──▶ gain match ──▶ NAME_prepped.wav
+          1  clean    measure ──▶ chain ──▶ -16 LUFS ──▶ NAME_prepped.wav
           2  detect   transcribe (WhisperX) ──▶ match the wordlist
                       ──▶ NAME_manifest.json + NAME_transcript.json
           3  bleep    tone over each span ──▶ NAME_censored.wav
@@ -540,8 +540,7 @@ def build_parser() -> argparse.ArgumentParser:
           2  chain    the rig's enabled stages, with the episode's overrides,
                       at 48 kHz
           3  meter    integrated loudness and true peak after the chain
-          4  gain     one constant gain to the working level (default -24
-                      LUFS), held under the peak ceiling (default -2 dBTP)
+          4  level    gain and a true-peak limiter to -16 LUFS under -1 dBTP
           ──▶ NAME_prepped.wav, 24-bit, 48 kHz
 
         Then audio_analysis.toml, recording what was measured and resolved.
@@ -594,7 +593,7 @@ def build_parser() -> argparse.ArgumentParser:
         step 3 of the pass, on one file: put the tone over every span.
 
           1  decode   AUDIO at its own rate, as mono
-          2  splice   a sine tone (1 kHz, --freq) at -27 dBFS RMS over each
+          2  splice   a sine tone (1 kHz, --freq) at -19 dBFS RMS over each
                       span MANIFEST lists; every other sample is untouched
           ──▶ OUT (default censored.wav)
 

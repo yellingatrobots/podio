@@ -1,4 +1,4 @@
-"""Level arithmetic: unit conversion, auto values, and gain match.
+"""Level arithmetic: unit conversion, auto values, and delivery loudness.
 
 Config speaks dB throughout. ffmpeg does not — agate wants linear amplitude,
 acompressor wants dB — so conversion lives here and stage classes call into it.
@@ -10,15 +10,13 @@ from dataclasses import dataclass
 AUTO_VALUE = re.compile(r"^([a-z_]+)(?:\s*([+-])\s*([\d.]+))?$")
 #: 20*log10(sqrt(2)) — how far a sine's peak sits above its RMS.
 SINE_PEAK_OVER_RMS_DB = 3.0102999566398120
-#: Fixed, not derived. Three dB under the -24 working level the clean step
-#: brings takes to, which puts the tone's peak at -24 dBFS: plainly audible
-#: against speech, nowhere near the peak ceiling, and not the loudest thing in
-#: the episode. Change it here if the working level ever moves.
-TONE_LEVEL_DB = -27.0
-#: Delivery loudness for the mastered mixdown: the podcast baseline (Apple
-#: Podcasts, AES TD1008). Unrelated to the working level, which takes keep.
+#: Delivery loudness: the podcast baseline (Apple Podcasts, AES TD1008).
 TARGET_LUFS = -16.0
 TRUE_PEAK_LIMIT_DB = -1.0
+#: Three dB under the delivery loudness, which puts the tone's peak on it:
+#: plainly audible against speech, under the limiter's ceiling, and not the
+#: loudest thing in the episode.
+TONE_LEVEL_DB = TARGET_LUFS - 3.0
 #: AES TD1008's tolerance around the target.
 TARGET_TOLERANCE_LU = 1.0
 #: Where the master's limiter sits: half a dB under the true-peak limit, for
@@ -42,13 +40,6 @@ class Measured:
     floor_db: float
     integrated_lufs: float | None = None
     true_peak_db: float | None = None
-
-
-@dataclass(frozen=True)
-class GainMatch:
-    gain_db: float
-    resulting_peak_db: float
-    clamped: bool
 
 
 def db_to_linear(db: float) -> float:
@@ -96,24 +87,6 @@ def tone_amplitude(tone_level_db: float, full_scale: int) -> int:
     """
     peak = db_to_linear(tone_level_db + SINE_PEAK_OVER_RMS_DB) * full_scale
     return min(full_scale, round(peak))
-
-
-def gain_match(
-    measured: Measured, working_level_db: float, peak_ceiling_db: float
-) -> GainMatch:
-    """Constant gain bringing a take to the working level, clamped at the ceiling."""
-    if measured.integrated_lufs is None or measured.true_peak_db is None:
-        raise ValueError(
-            "loudness has not been measured; gain match needs the post-chain pass"
-        )
-
-    wanted = working_level_db - measured.integrated_lufs
-    peak_if_applied = measured.true_peak_db + wanted
-    if peak_if_applied <= peak_ceiling_db:
-        return GainMatch(gain_db=wanted, resulting_peak_db=peak_if_applied, clamped=False)
-
-    allowed = peak_ceiling_db - measured.true_peak_db
-    return GainMatch(gain_db=allowed, resulting_peak_db=peak_ceiling_db, clamped=True)
 
 
 def master_gain(integrated_lufs: float) -> float:

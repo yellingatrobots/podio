@@ -13,7 +13,6 @@ def take(name: str) -> Take:
         name=name,
         source=Path(f"{name}.wav"),
         chain=[],
-        limiter=False,
         censor=None,
     )
 

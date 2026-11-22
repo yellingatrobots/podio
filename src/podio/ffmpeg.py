@@ -162,16 +162,6 @@ def _filters(*fragments: str) -> str:
     return ",".join(f for f in fragments if f)
 
 
-def apply_gain_command(
-    source: Path, destination: Path, gain_db: float, limiter: bool, ceiling_db: float
-) -> list[str]:
-    """Pass 3: the gain match, and the ceiling guard if this take asked for it."""
-    chain = f"volume={gain_db:g}dB"
-    if limiter:
-        chain += f",alimiter=limit={db_to_linear(ceiling_db):.5f}:level=false"
-    return _base(source, None) + ["-af", chain, "-c:a", "pcm_s24le", str(destination)]
-
-
 def normalize_command(source: Path, destination: Path, rate: int) -> list[str]:
     """Decode `source` to mono PCM WAV at `rate` Hz — what the ASR model wants."""
     return [

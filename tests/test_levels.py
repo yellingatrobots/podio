@@ -4,7 +4,6 @@ from podio.levels import (
     TARGET_LUFS,
     Measured,
     db_to_linear,
-    gain_match,
     master_gain,
     master_settled,
     meets_delivery,
@@ -57,27 +56,6 @@ def test_tone_amplitude_is_the_peak_of_a_sine_at_that_rms():
 def test_tone_amplitude_never_exceeds_full_scale():
     """0 dBFS RMS would peak 3 dB over full scale; it has to clamp, not wrap."""
     assert tone_amplitude(0.0, full_scale=2_147_483_647) == 2_147_483_647
-
-
-def test_gain_match_raises_a_quiet_take_to_the_working_level():
-    m = Measured(floor_db=-51.5, integrated_lufs=-21.2, true_peak_db=-4.9)
-    result = gain_match(m, working_level_db=-20.0, peak_ceiling_db=-3.0)
-    assert result.gain_db == pytest.approx(1.2)
-    assert result.resulting_peak_db == pytest.approx(-3.7)
-    assert not result.clamped
-
-
-def test_gain_match_clamps_rather_than_breaching_the_ceiling():
-    m = Measured(floor_db=-77.7, integrated_lufs=-24.8, true_peak_db=-2.1)
-    result = gain_match(m, working_level_db=-20.0, peak_ceiling_db=-3.0)
-    assert result.gain_db == pytest.approx(-0.9)
-    assert result.resulting_peak_db == pytest.approx(-3.0)
-    assert result.clamped
-
-
-def test_gain_match_needs_a_post_chain_measurement():
-    with pytest.raises(ValueError, match="not been measured"):
-        gain_match(IAN, working_level_db=-20.0, peak_ceiling_db=-3.0)
 
 
 def test_master_gain_brings_the_mixdown_to_the_target():

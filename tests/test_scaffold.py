@@ -76,7 +76,6 @@ def test_the_stub_it_writes_is_loadable(tmp_path):
 
     episode = load_episode(config, rigs)
     assert [t.name for t in episode.takes] == ["ian"]
-    assert episode.working_level_db == -24.0
 
 
 def test_declining_the_prompt_writes_nothing(tmp_path):

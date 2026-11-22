@@ -70,12 +70,12 @@ def run_on(episode: Path, *extra: str) -> int:
     )
 
 
-def test_a_prepped_take_lands_on_the_working_level(episode):
+def test_a_prepped_take_lands_at_delivery_loudness(episode):
     assert run_on(episode) == 0
 
     integrated, peak = loudness_of(episode / "alex_prepped.wav")
-    assert integrated == pytest.approx(-24.0, abs=0.5)
-    assert peak < -2.0
+    assert integrated == pytest.approx(-16.0, abs=0.5)
+    assert peak <= -1.0
 
 
 def test_the_prepped_take_is_24_bit_48k_mono(episode):
@@ -93,12 +93,11 @@ def test_the_run_records_what_it_measured(episode):
     run_on(episode)
     sidecar = tomllib.loads((episode / "audio_analysis.toml").read_text())
 
-    assert sidecar["working_level_db"] == -24.0
-    assert sidecar["peak_ceiling_db"] == -2.0
+    assert sidecar["target_lufs"] == -16.0
     assert sidecar["working_rate_hz"] == 48000
     assert sidecar["alex"]["output"] == "alex_prepped.wav"
     assert sidecar["alex"]["chain"].startswith("highpass=f=80")
-    assert not sidecar["alex"]["clamped"]
+    assert sidecar["alex"]["delivered_lufs"] == pytest.approx(-16.0, abs=0.5)
 
 
 def test_an_audition_writes_a_separate_short_file(episode):
