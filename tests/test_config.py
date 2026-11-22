@@ -1,6 +1,6 @@
 import pytest
 
-from podio.config import load_episode, merge_chain
+from podio.config import load_episode, load_take, merge_chain
 
 RIG_CHAIN = [
     {"name": "highpass", "f": 80},
@@ -194,3 +194,86 @@ def test_a_wordlist_override_resolves_against_the_episode_directory(tmp_path):
     assert load_episode(config, rigs).takes[0].censor.wordlist == (
         tmp_path / "extra_words.toml"
     )
+
+
+# One file at a time: the take is named after the file, and audio.toml beside
+# it is optional.
+
+
+def rigs_dir(tmp_path, **rigs):
+    path = tmp_path / "rigs"
+    path.mkdir()
+    for name, body in rigs.items():
+        (path / f"{name}.toml").write_text(body)
+    return path
+
+
+def test_a_file_named_after_a_rig_needs_no_audio_toml(tmp_path):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG)
+    take = load_take(tmp_path / "ian.mp4", rigs)
+
+    assert take.name == "ian"
+    assert take.source == tmp_path / "ian.mp4"
+    assert [s["name"] for s in take.chain] == ["highpass", "afftdn"]
+    assert take.censor.wordlist is None
+
+
+def test_a_wav_beside_a_video_is_the_take_s_audio(tmp_path):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG)
+    (tmp_path / "ian.wav").write_bytes(b"")
+
+    assert load_take(tmp_path / "ian.mp4", rigs).source == tmp_path / "ian.wav"
+
+
+def test_a_file_with_no_rig_of_its_name_says_how_to_name_one(tmp_path):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG)
+    with pytest.raises(ValueError, match=r"DJI_0042.*ian.*audio\.toml"):
+        load_take(tmp_path / "DJI_0042.mp4", rigs)
+
+
+def test_audio_toml_beside_the_file_picks_the_rig_and_overrides(tmp_path):
+    rigs = rigs_dir(tmp_path, ian_dji=IAN_RIG)
+    (tmp_path / "audio.toml").write_text(
+        """
+        [takes.ian]
+        rig = "ian_dji"
+
+        [takes.ian.afftdn]
+        enabled = true
+        """
+    )
+    take = load_take(tmp_path / "ian.mp4", rigs)
+    assert take.chain[1] == {"name": "afftdn", "enabled": True}
+
+
+def test_wordlists_resolve_against_the_file_s_directory_take_over_episode(tmp_path):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG, josh=IAN_RIG)
+    (tmp_path / "audio.toml").write_text(
+        """
+        [censor]
+        wordlist = "words.toml"
+
+        [takes.ian.censor]
+        wordlist = "ian_words.toml"
+        """
+    )
+    assert load_take(tmp_path / "ian.mp4", rigs).censor.wordlist == (
+        tmp_path / "ian_words.toml"
+    )
+    assert load_take(tmp_path / "josh.mp4", rigs).censor.wordlist == (
+        tmp_path / "words.toml"
+    )
+
+
+@pytest.mark.parametrize("toml, unknown", [
+    ("working_level_db = -24.0", "working_level_db"),
+    ("[censor]\nenabled = false", "enabled"),
+    ('[takes.ian]\nfile = "ian.wav"', "file"),
+    ("[takes.ian]\nlimiter = true", "limiter"),
+    ("[takes.ian.censor]\nenabled = false", "enabled"),
+])
+def test_settings_podio_no_longer_reads_are_errors(tmp_path, toml, unknown):
+    rigs = rigs_dir(tmp_path, ian=IAN_RIG)
+    (tmp_path / "audio.toml").write_text(toml)
+    with pytest.raises(ValueError, match=unknown):
+        load_take(tmp_path / "ian.mp4", rigs)

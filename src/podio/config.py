@@ -157,3 +157,64 @@ def _load_take(
         chain=merge_chain(rig.get("stage", []), overrides),
         censor=_load_censor(table.get("censor", {}), censor, episode_dir),
     )
+
+
+#: audio.toml's name, looked for beside each file podio is given.
+EPISODE_CONFIG = "audio.toml"
+EPISODE_KEYS = {"censor", "takes"}
+CENSOR_KEYS = {"wordlist"}
+FILE_TAKE_KEYS = {"rig"}
+
+
+def load_take(media: Path, rigs_dir: Path) -> Take:
+    """The take `media` is, configured by the audio.toml beside it, if any.
+
+    The take is named after the file. Its rig is the one of that name unless
+    audio.toml's [takes.NAME] says otherwise. A .wav with the same name beside
+    a video is the take's audio; the video then only supplies the picture.
+    """
+    media = Path(media)
+    name = media.stem
+    directory = media.parent
+    config_path = directory / EPISODE_CONFIG
+    episode = tomllib.loads(config_path.read_text()) if config_path.exists() else {}
+
+    _reject_unknown(episode, EPISODE_KEYS, config_path, "")
+    censor_table = episode.get("censor", {})
+    _reject_unknown(censor_table, CENSOR_KEYS, config_path, "[censor] ")
+    table = episode.get("takes", {}).get(name, {})
+    settings = {k: v for k, v in table.items() if not isinstance(v, dict)}
+    _reject_unknown(settings, FILE_TAKE_KEYS, config_path, f"[takes.{name}] ")
+    take_censor = table.get("censor", {})
+    _reject_unknown(take_censor, CENSOR_KEYS, config_path, f"[takes.{name}.censor] ")
+
+    rig_name = table.get("rig", name)
+    rig_path = rigs_dir / f"{rig_name}.toml"
+    if not rig_path.exists():
+        rigs = ", ".join(sorted(p.stem for p in rigs_dir.glob("*.toml")))
+        raise ValueError(
+            f"no rig {rig_name!r} for {media.name} (rigs: {rigs}); name the file "
+            f"after a rig, or set [takes.{name}] rig = \"...\" in "
+            f"{directory / EPISODE_CONFIG}"
+        )
+    overrides = {
+        k: v for k, v in table.items() if isinstance(v, dict) and k not in NON_STAGE_TABLES
+    }
+
+    wav = media.with_suffix(".wav")
+    censor = _load_censor(censor_table, Censor(), directory)
+    return Take(
+        name=name,
+        source=wav if wav.exists() else media,
+        chain=merge_chain(tomllib.loads(rig_path.read_text()).get("stage", []), overrides),
+        censor=_load_censor(take_censor, censor, directory),
+    )
+
+
+def _reject_unknown(table: Spec, allowed: set[str], path: Path, where: str) -> None:
+    unknown = sorted(set(table) - allowed)
+    if unknown:
+        raise ValueError(
+            f"{path}: {where}unknown setting {', '.join(unknown)}; "
+            f"expected {', '.join(sorted(allowed))}"
+        )
