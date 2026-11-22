@@ -1,5 +1,5 @@
 {
-  description = "podio — clean and censor an episode's takes for the NLE";
+  description = "podio — clean, level and censor podcast recordings, ready for production";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -103,7 +103,7 @@
             wrapProgram $out/bin/podio --set PODIO_FFMPEG ${ffmpeg}/bin/ffmpeg
           '';
           meta = old.meta // {
-            description = "Clean and censor an episode's takes into NLE-ready audio";
+            description = "Clean, level and censor podcast recordings, ready for production";
             mainProgram = "podio";
           };
         });

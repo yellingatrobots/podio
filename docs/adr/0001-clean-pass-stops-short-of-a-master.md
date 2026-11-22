@@ -10,7 +10,7 @@ gigabyte of I/O per run.
 
 ## Consequences
 
-_Partly superseded by 0003: `podio master` now masters the NLE's mixdown._
+_Superseded by 0005: takes now leave podio at delivery loudness._
 
 Nothing in this repo produces a distribution master; if that ever needs automating it
 is a separate concern operating on the NLE's mixdown, not an extra mode here. Takes

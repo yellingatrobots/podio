@@ -1,9 +1,9 @@
 # Podio
 
 The vocabulary for the audio pass that sits between raw per-speaker recordings
-and the NLE timeline for a *Yelling at Robots* episode. The pass cleans each
-take and censors it. Syncing and mixing belong to the NLE; delivery loudness
-is set afterwards, once, by mastering the NLE's mixdown.
+and the NLE timeline for a *Yelling at Robots* episode. Prep cleans each take,
+brings it to delivery loudness and censors it. Syncing and cutting belong to the
+NLE, which does not set loudness again.
 
 ## Language
 
@@ -20,9 +20,9 @@ _Avoid_: track, file, source, speaker
 **Bumper**:
 A short piece of audio recorded straight to disk for an episode — an intro, an
 outro, a transition. Deliberately not a take: podio captures it from a
-microphone rather than cleaning a recording someone else made, and it never goes
-through the chain, because there is nothing to gain-match it against. Written at
-the working rate so it sits beside a prepped take on the timeline unconverted.
+microphone rather than cleaning a recording someone else made. Recorded raw, at
+the working rate; prepping it without the bleep brings it to delivery loudness
+beside the takes.
 _Avoid_: sting, ident, jingle, clip, intro
 
 **Capture Device**:
@@ -44,16 +44,26 @@ the rig — room tone, a fan, a hotel room on the road. Measured per take, never
 assumed.
 _Avoid_: environment, noise, room
 
-**Prepped Take**:
-The audio output of the chain for one take: denoised, leveled, and gain-matched,
-but not yet censored. An intermediate — it exists so a censored take can be
-re-rendered without re-running the chain.
-_Avoid_: clean track, processed file, mixed, output
+**Prep**:
+The whole pass on one source file: clean, level to delivery loudness, detect,
+bleep, and put the audio back in the source's container. Every other step is an
+intermediate of it, and runs on its own only to debug.
+_Avoid_: process, run, finish, pipeline
+
+**Cleaned Take**:
+The output of the chain for one take, brought to delivery loudness but not yet
+censored. An intermediate.
+_Avoid_: clean track, processed file, mixed
 
 **Censored Take**:
-A prepped take with every span in its manifest replaced by the tone. The
-deliverable — the file that goes to the NLE timeline.
+A cleaned take with every span in its manifest replaced by the tone. An
+intermediate: prep puts it back into the source's container.
 _Avoid_: final, master, bleeped file
+
+**Prepped Take**:
+What prep writes: `NAME_prepped.mp4` or `NAME_prepped.wav`, the same kind of
+file as the source. The deliverable — the file that goes to the NLE timeline.
+_Avoid_: final, master, output
 
 **Stage**:
 One named step in the pass, carrying its own parameters. Most transform audio
@@ -66,40 +76,18 @@ _Avoid_: step, filter, effect, phase
 The ordered sequence of enabled stages applied to a take.
 _Avoid_: pipeline, graph, filter string
 
-**Working Level**:
-The integrated loudness every prepped take is brought to. Deliberately not a
-distribution loudness — it exists so takes sit at a common level with headroom
-for the NLE to mix. Delivery loudness is the master's.
-_Avoid_: target loudness, LUFS target, normalization target
-
-**Master**:
-The NLE's mixdown, brought to the delivery loudness and encoded for video and
-the feed. The only output podio makes from the mix rather than from a take.
-_Avoid_: export, render, final
-
 **Delivery Loudness**:
--16 LUFS integrated under -1 dBTP: what a master is brought to. Distinct from
-the **working level**, which is where takes sit before they are mixed.
-_Avoid_: target loudness, LUFS target
+-16 LUFS integrated under -1 dBTP: what every take is brought to, by one
+constant gain and a true-peak limiter, rendered again until it settles. Fixed,
+not configurable.
+_Avoid_: target loudness, LUFS target, working level, normalization
 
 **Working Rate**:
-48 kHz — the sample rate the chain runs at, and so the rate every prepped and
+48 kHz — the sample rate the chain runs at, and so the rate every cleaned and
 censored take is written at. Fixed, not configurable: it is what video work
 expects and the only rate `rnnoise` runs at. Every take is brought to it once,
-before the chain. Distinct from the **working level**, which is about loudness
-rather than rate.
+before the chain.
 _Avoid_: sample rate, target rate, project rate
-
-**Gain Match**:
-Bringing a take to the working level by a single constant gain, computed from
-the loudness measured at the end of that take's chain. Changes level only;
-never dynamics.
-_Avoid_: normalize, level, loudnorm
-
-**Peak Ceiling**:
-The true-peak limit a take may not exceed. When gain match would breach it, the
-tool reduces the gain and says so rather than clipping silently.
-_Avoid_: headroom, limit, max peak
 
 **Noise Floor**:
 The level of a take during the passages where nobody is speaking, estimated as a
@@ -127,8 +115,8 @@ _Avoid_: region, segment, cut, mute, hit
 
 **Manifest**:
 The spans for one take, as a file. An edit list, not audio — it can be read,
-edited, and re-rendered without re-running detection. It persists between runs,
-which is what makes hand-editing possible and staleness possible with it.
+edited, and rendered with `podio debug bleep` without re-running detection.
+Prep throws it away unless asked to keep its intermediates.
 _Avoid_: EDL, censor list, cuts, spans file
 
 **Transcript**:
@@ -138,13 +126,12 @@ when a word was missed.
 _Avoid_: captions, subtitles, ASR output
 
 **Tone Level**:
-The level of the tone that replaces a span: -27 dBFS RMS, three dB under the
-default working level. Fixed, so it does not follow an episode that sets its
-own working level. A censored passage is meant to be unmistakable, not the
-loudest thing in the episode.
+The level of the tone that replaces a span: -19 dBFS RMS, three dB under
+delivery loudness, so its peak sits at -16 dBFS. A censored passage is meant to
+be unmistakable, not the loudest thing in the episode.
 _Avoid_: bleep volume, amplitude, tone gain
 
 **Analysis Sidecar**:
-The per-episode record of what a run measured and what every auto value resolved
-to. A record of a run, never an input to one.
+The per-take record of what prep measured and what every auto value resolved
+to, kept among the intermediates. A record of a run, never an input to one.
 _Avoid_: cache, lockfile, state

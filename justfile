@@ -32,6 +32,6 @@ censor audio out="censored.wav" model="base.en":
     #!/usr/bin/env bash
     set -euo pipefail
     tmp="$(mktemp -d)"
-    {{podio}} detect "{{audio}}" --out "$tmp/manifest.json" --model {{model}}
-    {{podio}} bleep "{{audio}}" "$tmp/manifest.json" --out "{{out}}"
+    {{podio}} debug detect "{{audio}}" --out "$tmp/manifest.json" --model {{model}}
+    {{podio}} debug bleep "{{audio}}" "$tmp/manifest.json" --out "{{out}}"
     echo "wrote {{out}}  (play it: afplay {{out}})"

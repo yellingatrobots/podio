@@ -1,5 +1,7 @@
 # podio masters the NLE's mixdown
 
+_Superseded by 0005: the leveling below now runs on each take, and `podio master` is gone._
+
 Partly supersedes 0001, whose consequences ruled a distribution master out of this
 repo. Nothing after the NLE was setting delivery loudness, so `podio master` now does:
 it reads the NLE's exported mp4 and writes `STEM_mastered.mp4` and `STEM_mastered.mp3`

@@ -2,26 +2,28 @@
 
 Written in ASD-STE100 Simplified Technical English.
 
-podio cleans and censors the raw takes of a podcast episode. It makes audio
-that is ready for the video editor. It also masters the mixdown from the video
-editor for delivery.
+podio makes the raw recordings of a podcast ready for production. It cleans
+each recording, sets it to the delivery loudness, and puts a tone on the
+words to censor. The output is the same kind of file as the input.
 
-In: raw audio files, one for each speaker, at the rate of the recording.
-Out: audio files with less noise, at one common level and one common rate
-(48 kHz), and a manifest of the words to censor.
+In: one file for each speaker, an `.mp4` (or other video) or a `.wav`.
+Out: `NAME_prepped.mp4` or `NAME_prepped.wav`, at -16 LUFS integrated and
+below -1 dBTP, with less noise and with the tones.
 
 ```
-takes ──▶ chain (denoise, gate, EQ, compress) ──▶ gain match ──▶ prepped take
-      ──▶ transcribe (WhisperX) ──▶ detect (word list) ──▶ manifest
-      ──▶ put a tone on each span ──▶ censored take ──▶ video editor
-mixdown ──▶ master ──▶ mastered mp4 + feed mp3
+NAME.mp4 ──▶ chain (denoise, gate, EQ, compress) ──▶ -16 LUFS ──▶ transcribe
+         ──▶ detect (word list) ──▶ tone on each span ──▶ NAME_prepped.mp4
 ```
 
-The video editor does the synchronization and the mix. The pass does not set
-the delivery loudness on a take — refer to
-[ADR 0001](docs/adr/0001-clean-pass-stops-short-of-a-master.md). `podio master`
-sets it one time, on the mixdown from the video editor — refer to
-[ADR 0003](docs/adr/0003-podio-masters-the-nle-mixdown.md).
+```sh
+podio prep ian.mp4 josh.mp4    # the two files at the same time
+podio devices                  # the microphones
+podio bumper intro.wav         # record a bumper
+```
+
+The video editor does the synchronization and the cuts. It does not set the
+loudness again. Refer to
+[ADR 0005](docs/adr/0005-takes-leave-podio-at-delivery-loudness.md).
 
 ## Documents
 
@@ -55,7 +57,7 @@ operates the working tree. Your changes are immediately in operation:
 
 ```sh
 podio --help
-nix develop ~/tech/podio -c podio run   # from a directory of an episode
+nix develop ~/tech/podio -c podio prep ian.mp4   # from a directory of an episode
 ```
 
 To add a dependency, do `uv add NAME` in the shell. uv changes `pyproject.toml`
@@ -70,7 +72,7 @@ the flake:
 
 ```sh
 nix run github:yellingatrobots/podio -- devices
-nix run /path/to/podio -- run
+nix run /path/to/podio -- prep ian.mp4
 ```
 
 The two dashes divide the options of nix from the options of podio.
@@ -159,9 +161,13 @@ network.
   tests need no audio and no model.
 - **The manifest has no audio.** Detection makes an edit list. A different step
   reads that list and makes the audio.
-- **One gain change.** podio brings each take to the working level with one
-  constant gain. It does not use `loudnorm` — refer to
-  [ADR 0002](docs/adr/0002-static-gain-match-instead-of-loudnorm.md).
+- **One gain change and a limiter.** podio brings each take to -16 LUFS with
+  one constant gain and a true-peak limiter. It does not use `loudnorm` —
+  refer to [ADR 0002](docs/adr/0002-static-gain-match-instead-of-loudnorm.md).
+- **One file, one process.** `prep` examines all the files before it starts.
+  Then each file goes through its own process, and a failure of one file does
+  not stop the other files. The intermediate files are in a temporary
+  directory.
 - **The version is in one file.** `src/podio/__init__.py` holds `__version__`,
   and hatchling and `flake.nix` read it from there.
 
@@ -171,15 +177,13 @@ A fan was in operation during the recording of Ian. It was not in operation
 during the recording of Josh. The two microphones were the same class.
 
 ```
-ian    floor  -58.8 dB   I -26.0 → gain +2.0 → -24.0 LUFS, TP -2.9
-josh   floor  -79.5 dB   I -28.8 → gain +4.8 → -24.0 LUFS, TP -2.3
+ian    floor  -58.8 dB
+josh   floor  -79.5 dB
 ```
 
 Ian used `afftdn` and `gate`. Josh used neither of them. The noise floor of Ian
-went from −58.8 dB to −93.3 dB. The difference of 4.4 LU between the two takes
-became zero. The working level is −24 dB, not −20 dB, because these takes have
-a crest factor of approximately 21 LU after the chain. A level of −20 dB
-clamped the two takes.
+went from −58.8 dB to −93.3 dB. This episode used the earlier working level of
+−24 LUFS. Now each take goes to −16 LUFS.
 
 ## Not yet built
 
