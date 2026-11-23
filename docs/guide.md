@@ -11,7 +11,8 @@ the [README](../README.md).
 | take              | One recording. It has one speaker and one episode.                    |
 | prep              | The full procedure on one take. The command is `podio prep`.          |
 | prepped take      | The output of prep. It is ready for production.                       |
-| rig               | A file with the stable setup of one speaker. It lists all the stages. |
+| rig               | A file with the stable setup of one speaker. It has all the stages.   |
+| setting           | One key and its value in a rig or in `audio.toml`.                    |
 | stage             | One step in the chain. The gate is an example.                        |
 | chain             | The sequence of stages. podio applies the chain to each take.         |
 | delivery loudness | −16 LUFS integrated, with peaks below −1 dBTP.                        |
@@ -23,7 +24,7 @@ the [README](../README.md).
 
 ## 2. Install podio
 
-You can use podio without an installation. Enter this command:
+You can use podio without an installation. Use this command:
 
 ```sh
 nix run github:yellingatrobots/podio -- devices
@@ -31,8 +32,8 @@ nix run github:yellingatrobots/podio -- devices
 
 The two dashes divide the options of nix from the options of podio.
 
-To install podio on a machine that has no nix configuration, enter this command
-in the directory of the source:
+To install podio on a machine that has no nix configuration, use this command in
+the directory of the source:
 
 ```sh
 nix profile install .
@@ -47,10 +48,10 @@ uv tool install .
 This installation does not include ffmpeg. Install ffmpeg with the OpenAL
 capture device, or set `PODIO_FFMPEG` to the path of an ffmpeg.
 
-podio needs the model data of WhisperX. The first detection downloads
+The model data of WhisperX is necessary. The first detection downloads
 approximately 141 MB. Subsequent detections do not use the network.
 
-To show the version, enter this command:
+To show the version, use this command:
 
 ```sh
 podio --version
@@ -62,7 +63,7 @@ Do these steps in the directory of the episode.
 
 1. Put one file in the directory for each speaker. Use the name of the speaker,
    for example `ian.mp4` and `josh.mp4`. A file can be a video or a `.wav`.
-2. Enter this command:
+2. Use this command:
 
    ```sh
    podio prep ian.mp4 josh.mp4
@@ -90,7 +91,7 @@ If a `NAME.wav` is in the same directory as `NAME.mp4`, podio uses the audio of
 the `.wav` file and the picture of the `.mp4` file. podio does not synchronize
 them. The two files must start at the same time.
 
-podio examines all the files before it starts. If a file is missing, or if
+podio examines all the files before it starts. If a file is not there, or if
 podio cannot find the rig of a file, podio stops and writes nothing. Then podio
 does the files at the same time. If one file fails, podio completes the other
 files, and then it gives an error message.
@@ -107,7 +108,7 @@ completes. To examine them, use `--keep-temp`.
 ## 4. The episode file
 
 podio finds the rig with the name of the file: `ian.mp4` uses the rig `ian`.
-If this is correct, you do not need an episode file.
+If this is correct, an episode file is not necessary.
 
 To use a different rig for all the files of one command, use `--rig`:
 
@@ -119,19 +120,26 @@ podio prep intro.wav --rig josh --no-bleep
 file. The other settings of `audio.toml` stay in operation.
 
 Put an `audio.toml` file in the directory of the files to change the settings
-for one recording. To make one, enter this command in that directory:
+for one recording. To make the file, use this command in that directory:
 
 ```sh
 podio init                  # all the takes in this directory
 podio init intro.wav        # only this file
 ```
 
-The file has all the settings of each take: the rig, the audio delay, and all
-the stages of the rig. Each setting is a comment, and its value is the value
-that the take gets without the file. To change a setting, remove the `# ` at
-the start of the setting and at the start of its table, and change the value.
-A take with no rig of its name gets a list of the rigs. `podio init` does not
-write over an `audio.toml`. To write over it, use the `--force` option.
+The file has all the settings of each take. These are the rig, the audio
+delay, and all the stages of the rig. Each setting is a comment. Its value is
+the value that the take gets without the file. If a take has no rig of its
+name, the file shows a list of the rigs.
+
+To change a setting:
+
+1. Remove the `# ` at the start of the table of the setting.
+2. Remove the `# ` at the start of the setting.
+3. Change the value.
+
+`podio init` does not write over an `audio.toml`. To write over it, use the
+`--force` option.
 
 This is an example of an `audio.toml` with changes:
 
@@ -192,7 +200,7 @@ audio of a `.wav` output, because it has no picture. The rigs `josh` and
 `josh_dji` set 4. If you use a different camera for one episode, set
 `[takes.josh] audio_delay_frames = 0` in `audio.toml`.
 
-A rig lists all the stages, and it sets `enabled = false` for the stages that
+A rig has all the stages, and it sets `enabled = false` for the stages that
 are not usually necessary. Keep this rule: a rig holds what does not change,
 and `audio.toml` holds what changes with one recording.
 
@@ -206,7 +214,7 @@ highpass → afftdn → rnnoise → gate → eq → compressor → deesser
 
 After the chain, podio sets the take to -16 LUFS integrated with one constant
 gain, and a true-peak limiter keeps the peaks below -1 dBTP. The limiter
-decreases the loudness a little, thus podio adds the difference to the gain
+decreases the loudness a little. Thus podio adds the difference to the gain
 and does the two steps again, until the result is within 0.2 LU.
 
 A stage has an `enabled` key. All levels are in dB. A dB value can also be a
@@ -241,7 +249,7 @@ voice and other sounds, thus it can damage the sound of laughter.
 | ------- | ------- | --------------------------------------------- |
 | `model` | `"lq"`  | `lq` for room noise, `bd` for equipment noise |
 
-This stage needs the RNNoise model files. Set the environment variable
+For this stage, the RNNoise model files are necessary. Set the environment variable
 `RNNOISE_MODELS` to the directory of the `.rnnn` files, or give the directory
 with the `--rnnoise-models` option. If podio cannot find the file, it gives an error
 message with the full path.
@@ -321,7 +329,7 @@ voice becomes dull, do not increase `intensity` more. Increase `frequency` to
 ## 7. Censor the words
 
 `podio prep` censors each take after it sets the loudness. To prepare a take
-without censoring, use `--no-bleep`.
+and not censor it, use `--no-bleep`.
 
 ### The manifest
 
@@ -392,7 +400,7 @@ A value of −75 dB or lower is a quiet room. A higher value shows that a machin
 was in operation.
 
 Make these changes in `audio.toml`, not in the rig. To hear the result without
-the transcription, enter `podio debug clean ian.mp4`. It writes
+the transcription, use `podio debug clean ian.mp4`. It writes
 `ian_cleaned.wav`.
 
 | Problem                                        | Change                                                                                      |
@@ -423,13 +431,13 @@ Push `q` to stop the recording.
 
 podio records one channel at 48 kHz and writes 24-bit audio. The chain does
 not operate on a bumper, and its loudness is as recorded. To set it to the
-loudness of the takes, enter this command:
+loudness of the takes, use this command:
 
 ```sh
 podio prep intro.wav --rig josh --no-bleep   # writes intro_prepped.wav
 ```
 
-Without `--rig`, this needs a rig with the name of the file, or an
+Without `--rig`, a rig with the name of the file is necessary, or an
 `audio.toml` that gives one.
 
 The numbers of `podio devices` are positions in that list. The numbers change
@@ -495,7 +503,7 @@ span. `podio prep` uses the defaults.
 | `debug mux`       | `--out`     | `VIDEO_muxed.mov`     | The output file.                           |
 | `debug normalize` | `--out`     | `normalized.wav`      | The output file.                           |
 | `bumper`          | `--device`  | the system microphone | A number or a name.                        |
-| `bumper`          | `--force`   | off                   | Record over an existing file.              |
-| `init`            | `--force`   | off                   | Write over an existing `audio.toml`.       |
+| `bumper`          | `--force`   | off                   | Record over the file if it is there.       |
+| `init`            | `--force`   | off                   | Write over the `audio.toml` if it is there. |
 | `init`            | `--rigs`    | the included rigs     | The directory of the rig files.            |
 | all               | `--version` | —                     | Show the version and stop.                 |

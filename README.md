@@ -63,7 +63,7 @@ nix develop ~/tech/podio -c podio prep ian.mp4   # from a directory of an episod
 
 To add a dependency, do `uv add NAME` in the shell. uv changes `pyproject.toml`
 and `uv.lock`, and direnv builds the shell again. If a Linux build then stops
-with a missing `.so` library, add the library to `fixups` in `flake.nix`.
+because a `.so` library is not there, add the library to `fixups` in `flake.nix`.
 
 The justfile has only the tasks of the repository (`test`, `install`,
 `censor`). Its recipes operate in the repository. For an episode, use `podio`.
@@ -81,8 +81,8 @@ The two dashes divide the options of nix from the options of podio.
 podio is a package of this flake, thus a machine can install it declaratively.
 On the machine of the author, a home-manager module in `~/etc` does this. On a
 machine with no such configuration, `just install` does `nix profile install .`.
-Do not use `just install` where the home-manager module supplies podio, because
-the copy in the profile hides the other copy on the `PATH`.
+Do not use `just install` where the home-manager module supplies podio. The
+copy in the profile hides the other copy on the `PATH`.
 
 `$PODIO_FFMPEG` is in the build, thus podio always finds the correct ffmpeg. A
 directory of an episode is outside the development shell, and the `ffmpeg` on
@@ -159,7 +159,7 @@ network.
 - **A pure core.** Normalization (`text.py`), the match of the words
   (`wordlist.py`), the adjustment of the spans (`adjust.py`), the levels
   (`levels.py`), and the tone (`bleep.bleep_pcm`) are pure functions. Their
-  tests need no audio and no model.
+  tests do not use audio or a model.
 - **The manifest has no audio.** Detection makes an edit list. A different step
   reads that list and makes the audio.
 - **One gain change and a limiter.** podio brings each take to -16 LUFS with
@@ -188,8 +188,8 @@ went from −58.8 dB to −93.3 dB. This episode used the earlier working level 
 
 ## Not yet built
 
-- podio has no phonetic protection for the words that the ASR gets wrong. This
-  is the primary risk of a missed word.
+- podio has no phonetic protection for the words that the ASR does not identify
+  correctly. This is the primary risk of a missed word.
 - The censored output has one channel. podio mixes a two-channel source to one
   channel.
 
