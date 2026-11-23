@@ -199,8 +199,12 @@ def episode_template(media: list[Path], rigs_dir: Path) -> str:
             f'#   wordlist = "{name}_words.toml"',
         ]
         for spec in rig.get("stage", []):
-            stage = build_stage(spec).model_dump(exclude={"name"})
+            stage = build_stage(spec)
             lines += ["", f"# [takes.{name}.{spec['name']}]"]
-            lines += [f"# {key} = {_toml(value)}" for key, value in stage.items()]
+            for key, value in stage.model_dump(exclude={"name"}).items():
+                lines.append(f"# {key} = {_toml(value)}")
+                if key in stage.examples:
+                    lines += ["# For example:",
+                              f"#   {key} = {_toml(stage.examples[key])}"]
         blocks.append("\n".join(lines) + "\n")
     return "\n".join(blocks)

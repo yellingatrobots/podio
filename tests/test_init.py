@@ -97,3 +97,16 @@ def test_init_with_nothing_to_configure_is_an_error(tmp_path, monkeypatch):
     monkeypatch.chdir(tmp_path)
     assert main(["init"]) == 1
     assert not (tmp_path / EPISODE_CONFIG).exists()
+
+
+def test_an_empty_list_comes_with_an_example_that_is_a_valid_stage(tmp_path):
+    template = episode_template(touch(tmp_path, "josh.mp4"), RIGS)
+    after_eq = template.split("# [takes.josh.eq]")[1]
+    example = re.search(r"^#   (bands = .*)$", after_eq, re.M).group(1)
+
+    stage = build_stage({"name": "eq", **tomllib.loads(example)})
+
+    assert len(stage.bands) >= 1
+    assert tomllib.loads(uncomment(template)) == tomllib.loads(
+        uncomment(template.replace(example, "x = 1"))
+    )

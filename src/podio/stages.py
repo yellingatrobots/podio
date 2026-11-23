@@ -7,7 +7,7 @@ about them.
 """
 
 from pathlib import Path
-from typing import Any, Literal
+from typing import Any, ClassVar, Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -30,6 +30,8 @@ class Stage(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     enabled: bool = True
+    #: A value to show beside a setting whose default says little, e.g. [].
+    examples: ClassVar[dict[str, Any]] = {}
 
     def filter(self, measured: Measured, models_dir: Path) -> str:
         raise NotImplementedError
@@ -110,6 +112,10 @@ class Eq(Stage):
     name: Literal["eq"] = "eq"
     enabled: bool = False
     bands: list[Band] = []
+    examples: ClassVar[dict[str, Any]] = {"bands": [
+        {"f": 250, "width": 1.2, "gain_db": -3},
+        {"f": 3500, "width": 0.9, "gain_db": 2.5},
+    ]}
 
     def filter(self, measured: Measured, models_dir: Path) -> str:
         return ",".join(
