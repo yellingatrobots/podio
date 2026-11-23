@@ -17,6 +17,7 @@ NAME.mp4 ──▶ chain (denoise, gate, EQ, compress) ──▶ -16 LUFS ──
 
 ```sh
 podio prep ian.mp4 josh.mp4    # the two files at the same time
+podio init                     # write audio.toml: all the settings as comments
 podio devices                  # the microphones
 podio bumper intro.wav         # record a bumper
 ```

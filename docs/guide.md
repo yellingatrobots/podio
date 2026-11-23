@@ -119,7 +119,21 @@ podio prep intro.wav --rig josh --no-bleep
 file. The other settings of `audio.toml` stay in operation.
 
 Put an `audio.toml` file in the directory of the files to change the settings
-for one recording. This is an example:
+for one recording. To make one, enter this command in that directory:
+
+```sh
+podio init                  # all the takes in this directory
+podio init intro.wav        # only this file
+```
+
+The file has all the settings of each take: the rig, the audio delay, and all
+the stages of the rig. Each setting is a comment, and its value is the value
+that the take gets without the file. To change a setting, remove the `# ` at
+the start of the setting and at the start of its table, and change the value.
+A take with no rig of its name gets a list of the rigs. `podio init` does not
+write over an `audio.toml`. To write over it, use the `--force` option.
+
+This is an example of an `audio.toml` with changes:
 
 ```toml
 [censor]
@@ -433,6 +447,7 @@ record over a file, use the `--force` option.
 | Command                 | Function                                                            |
 | ----------------------- | ------------------------------------------------------------------- |
 | `podio prep FILE...`    | Makes each file ready for production.                               |
+| `podio init [FILE...]`  | Writes an `audio.toml` with all the settings as comments.           |
 | `podio devices`         | Shows the microphones of this machine.                              |
 | `podio bumper [OUT]`    | Records a bumper.                                                   |
 | `podio debug clean`     | Applies the chain and the loudness only. Writes `NAME_cleaned.wav`. |
@@ -481,4 +496,6 @@ span. `podio prep` uses the defaults.
 | `debug normalize` | `--out`     | `normalized.wav`      | The output file.                           |
 | `bumper`          | `--device`  | the system microphone | A number or a name.                        |
 | `bumper`          | `--force`   | off                   | Record over an existing file.              |
+| `init`            | `--force`   | off                   | Write over an existing `audio.toml`.       |
+| `init`            | `--rigs`    | the included rigs     | The directory of the rig files.            |
 | all               | `--version` | —                     | Show the version and stop.                 |

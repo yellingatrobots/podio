@@ -14,7 +14,7 @@ from pathlib import Path
 from . import __version__, capture, ffmpeg, prep
 from .bleep import render_file
 from .clean import measure_chain, process, report
-from .config import load_take
+from .config import EPISODE_CONFIG, episode_template, find_takes, load_take
 from .detect import transcribe_and_detect
 from .transcribe import WhisperXTranscriber
 from .wordlist import WordList
@@ -49,6 +49,26 @@ def _cmd_prep(args) -> int:
     if failed:
         report(f"error: {failed} of {len(jobs)} file(s) failed")
         return 1
+    return 0
+
+
+def _cmd_init(args) -> int:
+    """Write an audio.toml beside the takes, every setting at its default."""
+    files = [Path(f) for f in args.files] or find_takes(Path.cwd())
+    if not files:
+        report(f"error: no takes in {Path.cwd()}; name the files to configure")
+        return 1
+    directories = {f.parent.resolve() for f in files}
+    if len(directories) > 1:
+        report("error: an audio.toml configures one directory; the files are in "
+               + ", ".join(str(d) for d in sorted(directories)))
+        return 1
+    config = files[0].parent / EPISODE_CONFIG
+    if config.exists() and not args.force:
+        report(f"error: {config} exists; --force writes over it")
+        return 1
+    config.write_text(episode_template(files, args.rigs))
+    print(f"wrote {config} ({', '.join(f.stem for f in files)})")
     return 0
 
 
@@ -194,6 +214,7 @@ Make podcast recordings ready for production.
 
   podio prep FILE...   NAME.mp4 or NAME.wav ──▶ clean ──▶ -16 LUFS ──▶ bleep
                        ──▶ NAME_prepped.mp4 or NAME_prepped.wav
+  podio init [FILE...] write audio.toml: every setting, at its default
   podio devices        list the microphones a bumper can be recorded from
   podio bumper [OUT]   record an intro or outro straight to a 48 kHz wav
 
@@ -314,6 +335,29 @@ def build_parser() -> argparse.ArgumentParser:
                              "wordlist, else the one podio ships)")
     add_take_arguments(p_prep)
     p_prep.set_defaults(func=_cmd_prep)
+
+    p_init = command(
+        "init",
+        f"""
+        write an {EPISODE_CONFIG} with every setting at its default.
+
+          FILE... (default: the takes here) ──▶ {EPISODE_CONFIG} beside them
+
+        Each take gets its rig, its audio delay and every stage of the rig,
+        all commented out at the value the take gets without the file. A
+        take with no rig of its name gets the rigs to choose from. Files podio
+        wrote (NAME_prepped and the like) are not takes. An existing
+        {EPISODE_CONFIG} is kept unless --force.
+        """,
+    )
+    p_init.add_argument("files", nargs="*", type=Path, metavar="FILE",
+                        help="the takes to configure (default: every take in "
+                             "this directory)")
+    p_init.add_argument("--rigs", type=Path, default=RIGS,
+                        help="directory of rig files (default: the rigs podio ships)")
+    p_init.add_argument("--force", action="store_true",
+                        help=f"write over an existing {EPISODE_CONFIG}")
+    p_init.set_defaults(func=_cmd_init)
 
     p_devices = command(
         "devices",
