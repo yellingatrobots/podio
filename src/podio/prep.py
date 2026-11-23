@@ -51,6 +51,7 @@ def plan(
     files: list[Path],
     *,
     rigs: Path,
+    rig: str | None = None,
     bleep: bool,
     wordlist: Path | None,
     default_wordlist: Path,
@@ -68,7 +69,7 @@ def plan(
         media = Path(media)
         if not media.exists():
             raise ValueError(f"no file at {media}")
-        take = load_take(media, rigs)
+        take = load_take(media, rigs, rig)
         chosen = None
         if bleep:
             chosen = wordlist or take.censor.wordlist or default_wordlist

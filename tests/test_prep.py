@@ -213,3 +213,11 @@ def test_a_wav_has_no_picture_to_sync_so_the_delay_is_reported_not_applied(
 
     assert max_volume_of_head(episode / "josh_prepped.wav", 0.15) > -40
     assert "audio_delay_frames" in capsys.readouterr().err
+
+
+def test_a_file_not_named_after_a_rig_preps_with_the_rig_given(episode):
+    make_take(episode / "intro.wav")
+
+    assert prep(episode, "--no-bleep", str(episode / "intro.wav")) == 1
+    assert prep(episode, "--no-bleep", "--rig", "josh", str(episode / "intro.wav")) == 0
+    assert (episode / "intro_prepped.wav").exists()

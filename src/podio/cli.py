@@ -33,6 +33,7 @@ def _cmd_prep(args) -> int:
         jobs = prep.plan(
             args.files,
             rigs=args.rigs,
+            rig=args.rig,
             bleep=not args.no_bleep,
             wordlist=args.wordlist,
             default_wordlist=WORDLIST,
@@ -114,7 +115,7 @@ def _cmd_bumper(args) -> int:
 def _cmd_clean(args) -> int:
     """Clean and level each file on its own, with no detection or bleep."""
     try:
-        takes = [load_take(Path(f), args.rigs) for f in args.files]
+        takes = [load_take(Path(f), args.rigs, args.rig) for f in args.files]
         for take in takes:
             if args.dry_run:
                 _, chain = measure_chain(take, args.models)
@@ -246,6 +247,9 @@ def build_parser() -> argparse.ArgumentParser:
     def add_take_arguments(p):
         p.add_argument("--rigs", type=Path, default=RIGS,
                        help="directory of rig files (default: the rigs podio ships)")
+        p.add_argument("--rig", default=None, metavar="NAME",
+                       help="the rig for every FILE, over audio.toml's and the "
+                            "one named after the file")
         p.add_argument("--rnnoise-models", dest="models", type=Path,
                        default=Path(os.environ.get("RNNOISE_MODELS", "")),
                        help="directory of .rnnn files for rnnoise "
@@ -287,10 +291,11 @@ def build_parser() -> argparse.ArgumentParser:
               or NAME_prepped.wav (24-bit, 48 kHz)
 
         A NAME.wav beside NAME.mp4 is the audio; the mp4 then only gives the
-        picture. The rig is the one named NAME, unless an audio.toml beside
-        the file says [takes.NAME] rig = "...". Every file is checked before
-        any work starts; then they run in parallel, and one failing does not
-        stop the others. Intermediates go to a temporary directory.
+        picture. The rig is --rig if given, else the one an audio.toml beside
+        the file names in [takes.NAME] rig = "...", else the one named NAME.
+        Every file is checked before any work starts; then they run in
+        parallel, and one failing does not stop the others. Intermediates go
+        to a temporary directory.
         """,
     )
     p_prep.add_argument("files", nargs="+", type=Path, metavar="FILE",

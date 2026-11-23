@@ -109,6 +109,15 @@ completes. To examine them, use `--keep-temp`.
 podio finds the rig with the name of the file: `ian.mp4` uses the rig `ian`.
 If this is correct, you do not need an episode file.
 
+To use a different rig for all the files of one command, use `--rig`:
+
+```sh
+podio prep intro.wav --rig josh --no-bleep
+```
+
+`--rig` replaces the rig of `audio.toml` and the rig with the name of the
+file. The other settings of `audio.toml` stay in operation.
+
 Put an `audio.toml` file in the directory of the files to change the settings
 for one recording. This is an example:
 
@@ -403,10 +412,11 @@ not operate on a bumper, and its loudness is as recorded. To set it to the
 loudness of the takes, enter this command:
 
 ```sh
-podio prep intro.wav --no-bleep      # writes intro_prepped.wav
+podio prep intro.wav --rig josh --no-bleep   # writes intro_prepped.wav
 ```
 
-This needs a rig with the name of the file, or an `audio.toml` that gives one.
+Without `--rig`, this needs a rig with the name of the file, or an
+`audio.toml` that gives one.
 
 The numbers of `podio devices` are positions in that list. The numbers change
 when you connect a device. A name is more stable:
@@ -441,6 +451,7 @@ record over a file, use the `--force` option.
 | `--model`          | `base.en`         | The WhisperX model. `large-v3` is more accurate but slower. |
 | `--wordlist`       | the included list | A different word list for all the files.                    |
 | `--rigs`           | the included rigs | The directory of the rig files. Also in `debug clean`.      |
+| `--rig`            | the name of the file | The rig for all the files. Also in `debug clean`.        |
 | `--rnnoise-models` | `$RNNOISE_MODELS` | The directory of the `.rnnn` files. Also in `debug clean`.  |
 
 ### Options of debug detect

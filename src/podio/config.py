@@ -61,11 +61,11 @@ def _load_censor(table: Spec, inherited: Censor, episode_dir: Path) -> Censor:
     return Censor(wordlist=episode_dir / wordlist if wordlist else inherited.wordlist)
 
 
-def load_take(media: Path, rigs_dir: Path) -> Take:
+def load_take(media: Path, rigs_dir: Path, rig: str | None = None) -> Take:
     """The take `media` is, configured by the audio.toml beside it, if any.
 
-    The take is named after the file. Its rig is the one of that name unless
-    audio.toml's [takes.NAME] says otherwise. A .wav with the same name beside
+    The take is named after the file. Its rig is `rig` when given, else the
+    one audio.toml's [takes.NAME] names, else the one named after the file. A .wav with the same name beside
     a video is the take's audio; the video then only supplies the picture.
     """
     media = Path(media)
@@ -83,21 +83,21 @@ def load_take(media: Path, rigs_dir: Path) -> Take:
     take_censor = table.get("censor", {})
     _reject_unknown(take_censor, CENSOR_KEYS, config_path, f"[takes.{name}.censor] ")
 
-    rig_name = table.get("rig", name)
+    rig_name = rig or table.get("rig", name)
     rig_path = rigs_dir / f"{rig_name}.toml"
     if not rig_path.exists():
         rigs = ", ".join(sorted(p.stem for p in rigs_dir.glob("*.toml")))
-        raise ValueError(
-            f"no rig {rig_name!r} for {media.name} (rigs: {rigs}); name the file "
-            f"after a rig, or set [takes.{name}] rig = \"...\" in "
-            f"{directory / EPISODE_CONFIG}"
+        how = "" if rig else (
+            f"; name the file after a rig, or set [takes.{name}] rig = \"...\" "
+            f"in {directory / EPISODE_CONFIG}"
         )
+        raise ValueError(f"no rig {rig_name!r} for {media.name} (rigs: {rigs}){how}")
     overrides = {
         k: v for k, v in table.items() if isinstance(v, dict) and k not in NON_STAGE_TABLES
     }
 
-    rig = tomllib.loads(rig_path.read_text())
-    delay = table.get("audio_delay_frames", rig.get("audio_delay_frames", 0))
+    rig_config = tomllib.loads(rig_path.read_text())
+    delay = table.get("audio_delay_frames", rig_config.get("audio_delay_frames", 0))
     if type(delay) is not int:
         raise ValueError(
             f"audio_delay_frames for {media.name} must be a whole number of "
@@ -109,7 +109,7 @@ def load_take(media: Path, rigs_dir: Path) -> Take:
     return Take(
         name=name,
         source=wav if wav.exists() else media,
-        chain=merge_chain(rig.get("stage", []), overrides),
+        chain=merge_chain(rig_config.get("stage", []), overrides),
         censor=_load_censor(take_censor, censor, directory),
         audio_delay_frames=delay,
     )

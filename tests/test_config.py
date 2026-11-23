@@ -162,3 +162,33 @@ def test_an_audio_delay_that_is_not_whole_frames_is_an_error(tmp_path, value):
     rigs = rigs_dir(tmp_path, josh=f"audio_delay_frames = {value}\n" + IAN_RIG)
     with pytest.raises(ValueError, match="audio_delay_frames"):
         load_take(tmp_path / "josh.mp4", rigs)
+
+
+def test_a_rig_given_by_name_configures_a_file_of_any_name(tmp_path):
+    rigs = rigs_dir(tmp_path, josh=IAN_RIG)
+    take = load_take(tmp_path / "intro.wav", rigs, rig="josh")
+
+    assert take.name == "intro"
+    assert [s["name"] for s in take.chain] == ["highpass", "afftdn"]
+
+
+def test_a_rig_given_by_name_wins_over_audio_toml_and_keeps_its_overrides(tmp_path):
+    rigs = rigs_dir(tmp_path, josh=IAN_RIG)
+    (tmp_path / "audio.toml").write_text(
+        """
+        [takes.intro]
+        rig = "missing"
+
+        [takes.intro.afftdn]
+        enabled = true
+        """
+    )
+    take = load_take(tmp_path / "intro.wav", rigs, rig="josh")
+
+    assert take.chain[1] == {"name": "afftdn", "enabled": True}
+
+
+def test_a_rig_given_by_name_that_does_not_exist_is_an_error(tmp_path):
+    rigs = rigs_dir(tmp_path, josh=IAN_RIG)
+    with pytest.raises(ValueError, match=r"no rig 'jsoh' for intro\.wav.*josh"):
+        load_take(tmp_path / "intro.wav", rigs, rig="jsoh")

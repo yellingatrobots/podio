@@ -64,3 +64,10 @@ def test_where_whisperx_runs_is_asr_device_not_device(command):
 
 def test_bumper_keeps_device_for_the_microphone():
     assert build_parser().parse_args(["bumper", "--device", "2"]).device == "2"
+
+
+@pytest.mark.parametrize("command", [["prep"], ["debug", "clean"]])
+def test_the_rig_is_the_file_s_own_unless_given(command):
+    assert build_parser().parse_args([*command, "intro.wav"]).rig is None
+    args = build_parser().parse_args([*command, "--rig", "josh", "intro.wav"])
+    assert args.rig == "josh"
